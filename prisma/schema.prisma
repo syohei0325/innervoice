@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  emailHash  String   @unique @map("email_hash")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  profile          Profile?
+  proposals        Proposal[]
+  decisions        Decision[]
+  events           Event[]
+  deletionRequests DeletionRequest[]
+
+  @@map("users")
+}
+
+model Profile {
+  id              String  @id @default(cuid())
+  userId          String  @unique @map("user_id")
+  tz              String  @default("Asia/Tokyo")
+  displayName     String? @map("display_name")
+  commuteMinutes  Int?    @map("commute_minutes")
+  sleepWindow     String? @map("sleep_window")
+  ngHoursJson     String? @map("ng_hours_json")
+  mobilityPref    String? @map("mobility_pref")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Proposal {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  payloadJson String   @map("payload_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  decisions Decision[]
+
+  @@map("proposals")
+}
+
+model Decision {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  proposalId  String   @map("proposal_id")
+  icsBlob     String   @map("ics_blob")
+  minutesBack Int      @map("minutes_back")
+  decidedAt   DateTime @default(now()) @map("decided_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([userId, decidedAt])
+  @@map("decisions")
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  source      String
+  minutesBack Int?     @map("minutes_back")
+  metaJson    String?  @map("meta_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("events")
+}
+
+model DeletionRequest {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  status      String   @default("pending")
+  requestedAt DateTime @default(now()) @map("requested_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("deletion_requests")
+}
