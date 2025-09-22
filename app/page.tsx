@@ -5,6 +5,7 @@ import InputBar from './components/InputBar';
 import ProposalList from './components/ProposalList';
 import MBMeter from './components/MBMeter';
 import ConfirmSheet from './components/ConfirmSheet';
+import Footer from './components/Footer';
 import { Plan } from '@/lib/intent';
 
 export type Proposal = {
@@ -186,6 +187,7 @@ export default function Home() {
         
         <MBMeter minutesBack={minutesBackToday} />
       </div>
+      <Footer />
     </main>
   );
 }
