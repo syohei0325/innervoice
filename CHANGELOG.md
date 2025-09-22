@@ -59,12 +59,46 @@ tests/
 
 ---
 
+## [v0.2.0-alpha.1] - 2024-12-01
+
+### ✨ Added - MVP+ Features
+- **Intent Bus**: テキスト→JSON Intent→Plan生成システム
+- **Confirm once**: 複数アクション（Calendar+Messenger+Reminder）の一括実行
+- **ConfirmSheet UI**: 要約表示・個別チェック・透明性確保
+- **Parallel Execution**: Calendar.Create / Messenger.Send の並列処理
+- **Fallback Integrity**: .ics フォールバック経路を常時維持
+
+### 🔧 Technical - MVP+ Infrastructure
+- **Intent Schema**: Zod による型安全なIntent/Plan/Action定義
+- **Connector Pattern**: Calendar/Messenger/Reminder の統一インターフェース
+- **Database Extension**: intents/plans/executions/connectors テーブル追加
+- **API Enhancement**: `/api/plan` エンドポイント / `/api/confirm` 拡張
+- **Error Handling**: 部分成功・並列エラーの適切な処理
+
+### 📋 MVP+ User Flow
+1. 7秒入力 → 2提案表示（従来通り）
+2. **NEW**: 提案クリック → Intent化 → PlanA/B 生成
+3. **NEW**: ConfirmSheet でアクション確認・選択
+4. **NEW**: Confirm once で並列実行（Calendar+Message+Reminder）
+5. **NEW**: 実行結果表示・部分成功対応
+6. **継続**: .ics フォールバック・Minutes-Back 加算
+
+### 🎯 Performance & Reliability
+- **Plan Generation**: < 1秒（95%）
+- **Parallel Execution**: Calendar/Messenger同時実行
+- **Fault Tolerance**: 個別アクション失敗でも継続
+- **Backward Compatibility**: MVP v0.1.0 フォールバック維持
+
+---
+
 ## [Unreleased]
 
 ### 🚀 Planned Features
+- **監査ログ**: 実行履歴・ロールバック・リトライ機能
+- **Google Calendar API**: 実際のカレンダー統合
+- **Messaging API**: LINE/Slack 連携
 - **音声入力**: Web Speech API / OpenAI Whisper 統合
 - **ユーザー認証**: NextAuth.js 導入
 - **本番デプロイ**: Vercel + Neon/Supabase
 - **リアルタイム計測**: PostHog統合
 - **パフォーマンス最適化**: p50 < 1秒目標
-- **Apple/Google Calendar**: 双方向同期

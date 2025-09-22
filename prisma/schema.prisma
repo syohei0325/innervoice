@@ -20,6 +20,9 @@ model User {
   decisions        Decision[]
   events           Event[]
   deletionRequests DeletionRequest[]
+  intents          Intent[]
+  plans            Plan[]
+  connectors       Connector[]
 
   @@map("users")
 }
@@ -89,4 +92,60 @@ model DeletionRequest {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("deletion_requests")
+}
+
+// MVP+ テーブル追加
+model Intent {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  text      String
+  json      String   @map("json")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plans Plan[]
+
+  @@map("intents")
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  intentId    String   @map("intent_id")
+  actionsJson String   @map("actions_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intent     Intent      @relation(fields: [intentId], references: [id], onDelete: Cascade)
+  executions Execution[]
+
+  @@index([userId, createdAt])
+  @@map("plans")
+}
+
+model Execution {
+  id          String   @id @default(cuid())
+  planId      String   @map("plan_id")
+  status      String   @default("pending")
+  resultsJson String?  @map("results_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, createdAt])
+  @@map("executions")
+}
+
+model Connector {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  provider   String
+  enabled    Boolean  @default(true)
+  scopesJson String?  @map("scopes_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("connectors")
 }

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import InputBar from './components/InputBar';
 import ProposalList from './components/ProposalList';
 import MBMeter from './components/MBMeter';
+import ConfirmSheet from './components/ConfirmSheet';
+import { Plan } from '@/lib/intent';
 
 export type Proposal = {
   id: string;
@@ -16,6 +18,8 @@ export default function Home() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [minutesBackToday, setMinutesBackToday] = useState(0);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
 
   const handleInput = async (text: string) => {
     setIsLoading(true);
@@ -48,7 +52,35 @@ export default function Home() {
     }
   };
 
-  const handleConfirm = async (proposalId: string) => {
+  const handleProposalClick = async (proposalId: string) => {
+    // MVP+: Generate plans from proposal
+    try {
+      const response = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          proposal_id: proposalId,
+          context: { tz: 'Asia/Tokyo' }
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate plans');
+      
+      const data = await response.json();
+      
+      if (data.plans && data.plans.length > 0) {
+        // Show first plan in ConfirmSheet
+        setSelectedPlan(data.plans[0]);
+      }
+    } catch (error) {
+      console.error('Error generating plans:', error);
+      // Fallback to MVP behavior
+      handleConfirmMVP(proposalId);
+    }
+  };
+
+  const handleConfirmMVP = async (proposalId: string) => {
+    // Original MVP behavior (fallback)
     try {
       const response = await fetch('/api/confirm', {
         method: 'POST',
@@ -80,6 +112,55 @@ export default function Home() {
     }
   };
 
+  const handlePlanConfirm = async (planId: string, enabledActions: string[]) => {
+    setIsExecuting(true);
+    try {
+      const response = await fetch('/api/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          plan_id: planId,
+          enabled_actions: enabledActions 
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to execute plan');
+      
+      const data = await response.json();
+      
+      // Show results
+      if (data.execution_status === 'success') {
+        alert(`✅ ${enabledActions.length}件のアクションが成功しました！`);
+      } else {
+        alert(`⚠️ 一部のアクションが失敗しました。詳細をご確認ください。`);
+      }
+      
+      // Download .ics file if available
+      if (data.ics_url) {
+        window.open(data.ics_url, '_blank');
+      }
+      
+      // Update minutes back
+      if (data.minutes_back) {
+        setMinutesBackToday(prev => prev + data.minutes_back);
+      }
+      
+      // Reset states
+      setSelectedPlan(null);
+      setProposals([]);
+      
+    } catch (error) {
+      console.error('Error executing plan:', error);
+      alert('❌ プランの実行に失敗しました。');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handlePlanCancel = () => {
+    setSelectedPlan(null);
+  };
+
   return (
     <main className="container mx-auto px-4 py-8 max-w-2xl">
       <div className="space-y-6">
@@ -91,7 +172,16 @@ export default function Home() {
         <InputBar onInput={handleInput} isLoading={isLoading} />
         
         {proposals.length > 0 && (
-          <ProposalList proposals={proposals} onConfirm={handleConfirm} />
+          <ProposalList proposals={proposals} onConfirm={handleProposalClick} />
+        )}
+        
+        {selectedPlan && (
+          <ConfirmSheet
+            plan={selectedPlan}
+            onConfirm={handlePlanConfirm}
+            onCancel={handlePlanCancel}
+            isExecuting={isExecuting}
+          />
         )}
         
         <MBMeter minutesBack={minutesBackToday} />
