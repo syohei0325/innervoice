@@ -3,16 +3,40 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
+import { ProposeRequestSchema, validateEnvironment, checkRateLimit, createErrorResponse } from '@/lib/validation';
+
+// 環境変数検証（起動時）
+const env = validateEnvironment();
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: env.OPENAI_API_KEY,
 });
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    const { text, context } = await request.json();
+    // レート制限チェック
+    const clientIp = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
+    if (!checkRateLimit(clientIp, 10, 60000)) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    const requestBody = await request.json();
+    
+    // 入力値検証
+    const validation = ProposeRequestSchema.safeParse(requestBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: validation.error.errors },
+        { status: 400 }
+      );
+    }
+
+    const { text, context } = validation.data;
     
     if (!text?.trim()) {
       return NextResponse.json(
@@ -105,7 +129,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       proposals,
-      latency_ms: Date.now() - startTime
+      latency_ms: Date.now() - startTime,
+      fallback: true
     });
   }
 }
