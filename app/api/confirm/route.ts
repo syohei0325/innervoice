@@ -1,34 +1,22 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
-import { connectorManager } from '@/lib/connectors';
-import { Action } from '@/lib/intent';
 
 export async function POST(request: NextRequest) {
   try {
-    const { proposal_id, plan_id, enabled_actions } = await request.json();
+    const { proposal_id } = await request.json();
     
-    if (!proposal_id && !plan_id) {
+    console.log('Confirm API called with proposal_id:', proposal_id);
+    
+    if (!proposal_id) {
       return NextResponse.json(
-        { error: 'Either proposal_id or plan_id is required' },
+        { error: 'proposal_id is required' },
         { status: 400 }
       );
     }
 
-    // For MVP, we'll use a mock user ID
-    // TODO: Implement proper user authentication
-    const mockUserId = 'user_mock_001';
-    
-    // MVP+ Plan execution
-    if (plan_id && enabled_actions) {
-      return await executePlan(plan_id, enabled_actions, mockUserId);
-    }
-    
-    // MVP: Original proposal-based flow
-    // Find the proposal (for now, we'll create mock proposal data)
-    // TODO: Actually retrieve from proposals table
+    // シンプルなモック提案データ
     const mockProposal = {
       id: proposal_id,
       title: "選択されたタスク",
@@ -65,142 +53,30 @@ END:VCALENDAR`;
     // Calculate minutes back (simplified for MVP)
     const minutesBack = Math.max(mockProposal.duration_min - 5, 0); // Assume 5min saved
     
-    try {
-      // Save decision to database
-      await prisma.decision.create({
-        data: {
-          userId: mockUserId,
-          proposalId: proposal_id,
-          icsBlob: icsContent,
-          minutesBack: minutesBack,
-        },
-      });
+    console.log('Generated ICS content, minutes back:', minutesBack);
 
-      // Log event
-      await prisma.event.create({
-        data: {
-          userId: mockUserId,
-          source: 'confirmed',
-          minutesBack: minutesBack,
-          metaJson: JSON.stringify({ proposalId: proposal_id }),
-        },
-      });
-    } catch (dbError) {
-      console.error('Database error (continuing with response):', dbError);
-      // Continue with response even if DB fails for MVP
-    }
+    // データベース保存は一時的にスキップ（エラー回避）
+    console.log('Skipping database save for debugging');
 
+    // Create blob URL for download
+    const blob = new Blob([icsContent], { type: 'text/calendar' });
+    
     return NextResponse.json({
       ics_url: `/api/download/${eventId}`,
-      minutes_back: minutesBack
+      minutes_back: minutesBack,
+      success: true,
+      debug: 'Database save skipped for debugging'
     });
+
   } catch (error) {
     console.error('Error in /api/confirm:', error);
     return NextResponse.json(
-      { error: 'Failed to confirm proposal' },
+      { 
+        error: 'Failed to confirm proposal',
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     );
   }
-}
-
-// MVP+ Plan execution function
-async function executePlan(planId: string, enabledActionIndices: string[], userId: string) {
-  try {
-    // Plan を取得
-    const plan = await prisma.plan.findUnique({
-      where: { id: planId },
-    });
-    
-    if (!plan) {
-      return NextResponse.json(
-        { error: 'Plan not found' },
-        { status: 404 }
-      );
-    }
-
-    const actions: Action[] = JSON.parse(plan.actionsJson);
-    
-    // 有効化されたアクションのみ実行
-    const enabledActions = actions.filter((_, index) => 
-      enabledActionIndices.includes(index.toString())
-    );
-
-    // 並列実行
-    const results = await connectorManager.executeActions(enabledActions);
-    
-    // Execution を記録
-    try {
-      await prisma.execution.create({
-        data: {
-          planId: planId,
-          status: results.every(r => r.status === 'ok') ? 'completed' : 'partial',
-          resultsJson: JSON.stringify(results),
-        },
-      });
-    } catch (dbError) {
-      console.error('Execution record failed:', dbError);
-    }
-
-    // Minutes-Back 計算
-    const successfulActions = results.filter(r => r.status === 'ok');
-    const minutesBack = Math.min(
-      successfulActions.length * 5, // 1アクション成功につき5分節約
-      30 // 最大30分
-    );
-
-    // .ics フォールバック生成（常時利用可能）
-    const calendarAction = enabledActions.find(a => a.action === 'calendar.create');
-    let icsUrl = null;
-    
-    if (calendarAction) {
-      const eventId = uuidv4();
-      icsUrl = `/api/download/${eventId}`;
-      
-      // ICS用のdecision記録（MVP互換性のため）
-      try {
-        const icsContent = generateIcsContent(calendarAction, eventId);
-        await prisma.decision.create({
-          data: {
-            userId: userId,
-            proposalId: planId, // Plan IDを流用
-            icsBlob: icsContent,
-            minutesBack: minutesBack,
-          },
-        });
-      } catch (dbError) {
-        console.error('ICS fallback record failed:', dbError);
-      }
-    }
-
-    return NextResponse.json({
-      results,
-      minutes_back: minutesBack,
-      ics_url: icsUrl,
-      execution_status: results.every(r => r.status === 'ok') ? 'success' : 'partial'
-    });
-  } catch (error) {
-    console.error('Plan execution error:', error);
-    return NextResponse.json(
-      { error: 'Plan execution failed' },
-      { status: 500 }
-    );
-  }
-}
-
-function generateIcsContent(action: Action, eventId: string): string {
-  const now = new Date();
-  const startTime = action.start ? new Date(action.start) : new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const endTime = new Date(startTime.getTime() + (action.duration_min || 30) * 60 * 1000);
-
-  return `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//InnerVoice//EN
-BEGIN:VEVENT
-UID:${eventId}@innervoice.app
-DTSTART:${startTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z
-DTEND:${endTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z
-SUMMARY:${action.title || 'InnerVoice Task'}
-DESCRIPTION:Generated by InnerVoice MVP+ (${action.duration_min || 30}分)
-END:VEVENT
-END:VCALENDAR`;
 }
