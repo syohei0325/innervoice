@@ -31,6 +31,11 @@ pnpm i
 cp .env.example .env.local
 pnpm dev
 
+## For Developers（Public API）
+- 開発者向けの**公開API/SDK/Webhook**を提供します（β）。
+- 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/confirm`で一括実行 → 4) `minutes_back` を受領。
+- 詳細は **docs/PUBLIC_API.md** / **docs/INTENT_SCHEMA.md** / **docs/WEBHOOKS.md** / **docs/CONNECTOR_SDK.md** を参照。
+
 ## デザイン原則
 - No Feed / No Scroll
 - One‑shot UX（7秒→2提案→1確定）
@@ -137,6 +142,8 @@ InnerVoice は、スクロールではなく「**決めて、置いて、戻る*
 - **DB：Postgres（Neon/Supabase） + Prisma**（初期からPostgres固定）
 - E2E：Playwright
 - 計測：PostHog or GA4（軽量）
+- Public API Gateway（API Key / Rate Limiter / Versioning）
+- Webhooks Dispatcher（署名付与 / リトライ）
 
 ## データ流れ
 入力(7秒音声/テキスト)
@@ -146,6 +153,13 @@ InnerVoice は、スクロールではなく「**決めて、置いて、戻る*
  → **Confirm once**（実行プランの要約＋チェックで最終承認）
  → **/api/confirm**（Plan並列実行：Calendar/Messenger/...）＋ **.icsフォールバック**
  → 結果通知 / Minutes‑Back 加算 / 監査ログ
+
+## データ流れ（外部開発者）
+外部App
+ → POST /v1/plan（API Key）
+ → plans[2] を受領 → ユーザーに要約表示（あなたのUI）
+ → POST /v1/confirm（plan_id）
+ → Webhook `action.executed` / `minutes_back.added`
 
 ## フォールバック
 - 失敗/遅延：直近の「My Voice」テンプレA/Bを即時提示
@@ -241,310 +255,27 @@ Res: { "results":[
 # END: docs/API_CONTRACTS.md
 # ─────────────────────────
 
-
-# ─────────────────────────────
-# BEGIN: docs/SECURITY_PRIVACY.md
-# ─────────────────────────────
-# セキュリティ / プライバシー
-
-- **データ最小化**：音声は即テキスト化→**要約のみ保存**（原音は既定保存しない/任意ONでも90日ローテ）
-- 暗号化：At‑Rest AES‑256 / In‑Transit TLS1.2+
-- 削除API：/api/account/delete（48h以内完了）
-- エクスポート：/api/account/export（JSON）
-- ログ：PII無し・ハッシュ化
-- 透明性：月次 Transparency Report（削除件数/保持期間/障害）
-- 感情推定（Emotion AI）は既定OFF。職場/教育など高リスク文脈では無効化
-- **voiceprint（声紋）**は保存/照合しない方針。必要時は明示同意・最小保持・期限付き破棄
-- コネクタは最小権限（scopes最小）/ 監査ログ（誰が何をどのアプリに送ったか）を保持
-# ─────────────────────────────
-# END: docs/SECURITY_PRIVACY.md
-# ─────────────────────────────
-
-
-# ─────────────────────────────
-# BEGIN: docs/TEST_STRATEGY.md
-# ─────────────────────────────
-# テスト戦略
-
-## ユニット
-- .ics生成 / TZ計算 / 提案バリデータ
-
-## 結合
-- propose→UI→confirm→.ics→MB加算の一連
-- plan→confirm（Confirm once）→ Calendar+Messenger 並列実行 / 片方失敗時のロールバック/リトライ
-
-## E2E（Playwright）
-- 7秒入力（モック）→2提案→PlanA/PlanB 生成→Confirm once→ Calendarイベント作成 & メッセ送信 で PASS
-- .ics フォールバック：ネットワーク遮断時に .ics ダウンロードで PASS
-- p50/p95レイテンシ閾値超過で失敗
-
-## SLO
-- propose→confirm 転換≥70% / iv.error<1%
-# ─────────────────────────────
-# END: docs/TEST_STRATEGY.md
-# ─────────────────────────────
-
-
 # ─────────────────────────
-# BEGIN: docs/OBSERVABILITY.md
+# BEGIN: docs/PUBLIC_API.md
 # ─────────────────────────
-# モニタリング / 計測
+# Public API（β）
 
-### 北極星
-- Median Minutes‑Back
-
-### コアイベント
-- input_started / proposals_shown / confirmed / ics_downloaded / minutes_back_added / error / nps_submitted
-- plan_generated / plan_confirmed / action_executed{action,status} / fallback_ics_used
-
-### ダッシュボード
-- 今日/週/月 MB
-- シーン別MB（morning/move/night）
-- p50/p95 レイテンシ
-# ─────────────────────────
-# END: docs/OBSERVABILITY.md
-# ─────────────────────────
-
-
-# ──────────────────────────
-# BEGIN: docs/CURSOR_RULES.md
-# ──────────────────────────
-# Cursor 依頼ルール（重要）
-
-## 目的
-- **MVP実装**：7秒→2提案→1確定（.ics）、1画面UI、E2E 1本、MB集計
-- **MVP+**：Intentバス & Confirm once で Calendar+Messenger を一括実行（.ics フォールバック維持）
-
-## コーディング規約
-- TypeScript / ESLint / Prettier
-- コンポーネント小さく / hooksに副作用
-- 例外は Result<T,E> で扱う
-
-## 各APIファイルの先頭に必ず記述
-export const runtime = 'nodejs';
-
-## 依頼テンプレ（最初に実行）
-Task: MVP "7秒→2提案→.ics" を実装して PR 作成  
-Acceptance:
-- 1画面UI（InputBar / ProposalList / ProposalCard×2 / ConfirmButton / MBMeter）
-- 7秒入力→2提案→.icsダウンロード（p50<2s）/ フォールバック動作
-- Prisma(Postgres)で decisions/events へ記録
-- E2E(Playwright)1本 PASS / Lint/Type OK
-Deliverables:
-- PR 1本（スクショ/動画/GIF・README更新）
-
-## 次の依頼（順番）
-1) /api/propose 実装最適化（p50<1s目標）
-2) Silent‑Mode（音声不可時テキスト最短導線）
-3) MBダッシュボード（今日/週/月）
-4) Intentバス実装（JSONスキーマ/配車）
-5) /api/plan と Confirm once UI（要約＋チェック付き）
-6) Connector: Calendar.Create / Messenger.Send（並列実行）
-7) ロールバック/リトライと監査ログ
-8) NPSと不満収集フォーム
-# ──────────────────────────
-# END: docs/CURSOR_RULES.md
-# ──────────────────────────
-
-
-# ────────────────────────────
-# BEGIN: docs/UI_SKETCH.md
-# ────────────────────────────
-# 1画面UI ワイヤー & 命名
-
-[ InputBar ] ← 7秒（音声/無音切替）
-[ ProposalList ]
-  ├─ ProposalCard(A) 〈duration_min/slot〉 [PlanButton]
-  └─ ProposalCard(B) 〈duration_min/slot〉 [PlanButton]
-[ ConfirmSheet ]
-  ├─ 実行プラン要約（例：3アクション）
-  ├─ ☑ Calendar: 9/19 07:00-07:30「朝ラン」
-  ├─ ☑ Messenger: 妻 に「7時に走ってくるね」
-  ├─ ☑ Reminders: 06:45 「ストレッチ」
-  └─ [Confirm once（一括実行）]
-[ MBMeter ] 今日の Minutes‑Back 合計
-[ Footer ] エラートースト / Silent切替 / 設定（最小）
-
-コンポーネント：InputBar, ProposalList, ProposalCard, PlanButton, ConfirmSheet, MBMeter
-# ────────────────────────────
-# END: docs/UI_SKETCH.md
-# ────────────────────────────
-
-
-# ────────────────────────────
-# BEGIN: docs/ROADMAP_90DAYS.md
-# ────────────────────────────
-# 90日ロードマップ（PMF検証）
-
-## W1–W3（コア体験のみ）
-- 7秒→2提案→.ics / p50<2s / ics成功率>99%
-
-## W4–W7（記憶ミニ）
-- My Voice（5項目）で当たり率UP
-- 朝/移動/夜テンプレ提案
-
-## W8–W12（半自動）
-- Google/Apple Calendar 片→双方向
-- 朝イチ「空き◯分→A/B/C」提案
-- Confirm once：Calendar+Messenger 一括実行 / 並列エラー処理
-- 週次MBレポートに「束ねた実行」での短縮内訳を追加
-# ────────────────────────────
-# END: docs/ROADMAP_90DAYS.md
-# ────────────────────────────
-
-
-# ─────────────────────────
-# BEGIN: docs/FOUNDERS_50.md
-# ─────────────────────────
-# Founder's 50（コア検証ユーザー）
-
-条件：14日連続使用 / 週1×30分フィードバック  
-特典：Pro1年/クレジット/称号  
-指標：D1/D7/D30 / 日確定数 / MB / NPS / 定性不満
-# ─────────────────────────
-# END: docs/FOUNDERS_50.md
-# ─────────────────────────
-
-
-# ──────────────────
-# BEGIN: docs/PROMPTS.md
-# ──────────────────
-# LLM プロンプト方針（MVP）
-
-目的：**2案だけ**出す。各案に **duration_min** を必須付与。冗長説明なし。
-
-System:
-「あなたは"時間を返す"アシスタント。出力は JSON で proposals[] を2つ返す。」
-
-User例: 「明日朝ランニングしたい。30分くらい。」
-
-出力例:
-{"proposals":[
- {"title":"朝ラン20分","slot":"07:10","duration_min":20},
- {"title":"夜ストレッチ15分","slot":"21:30","duration_min":15}
-]}
-
-### MVP+ 用 追加出力例（Intent & Followups 付き）
-{"intent":
- {"action":"schedule","title":"朝ラン","start":"07:00","duration_min":30,
-  "followups":[
-    {"action":"message","to":"妻","text":"7時に走ってくるね"},
-    {"action":"remind","time":"06:45","note":"ストレッチ"}
-  ]
- }
-}
-# ──────────────────
-# END: docs/PROMPTS.md
-# ──────────────────
-
-
-# ─────────────────────
-# BEGIN: docs/ICS_SPEC.md
-# ─────────────────────
-# .ics 仕様（MVP）
-
-TZ：profiles.tz / 未設定はブラウザTZ  
-SUMMARY：提案タイトル  
-DESCRIPTION：Generated by InnerVoice（所要時間含む）  
-Content-Type: text/calendar; charset=utf-8  
-Content-Disposition: attachment; filename="innervoice-evt_*.ics"
-
-備考：MVP+ では .ics は常時フォールバック経路として使用
-# ─────────────────────
-# END: docs/ICS_SPEC.md
-# ─────────────────────
-
-
-# ─────────────────────────
-# BEGIN: docs/DELETION_EXPORT.md
-# ─────────────────────────
-# データ削除 / エクスポート
-
-GET /api/account/export → JSON（要約/操作メタ/MB履歴）  
-POST /api/account/delete → 48h以内に完了（確認メール）
-# ─────────────────────────
-# END: docs/DELETION_EXPORT.md
-# ─────────────────────────
-
-
-# ─────────────────────
-# BEGIN: .env.example
-# ─────────────────────
-OPENAI_API_KEY=<your-key>
-NEXT_PUBLIC_APP_NAME=InnerVoice
-APP_TIMEZONE_DEFAULT=Asia/Tokyo
-TELEMETRY_WRITE_KEY=<posthog-or-ga4>
-DATABASE_URL=postgresql://<user>:<pass>@<host>:5432/<db>?sslmode=require
-# ─────────────────────
-# END: .env.example
-# ─────────────────────
-
-
-# ─────────────────────────────
-# BEGIN: .github/PULL_REQUEST_TEMPLATE.md
-# ─────────────────────────────
 ## 概要
-- ユーザーストーリー / 背景
+- ベースURL：`${NEXT_PUBLIC_API_BASE_URL}/v1`
+- 認証：`Authorization: Bearer <API_KEY>`
+- レート制限：デフォルト **60 req/min**（Key+IP）。超過→HTTP 429
+- バージョニング：`/v1`（後方互換に配慮）
 
-## 受け入れ基準
-- [ ] 7秒→2提案→.ics の経路（p50<2s）
-- [ ] フォールバック動作確認
-- [ ] Prisma(Postgres)への記録
-- [ ] E2E 1本 PASS / Lint/Type OK
-- [ ] Plan（MVP+）：Confirm once で Calendar+Messenger を一括実行
-- [ ] .ics フォールバック経路の動作確認
+## Quickstart（cURL）
+```bash
+# 1) Planを取得
+curl -s -X POST "$BASE/v1/plan" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"明日朝30分ラン","context":{"tz":"Asia/Tokyo"}}'
 
-## スクショ/動画
-（貼付）
-
-## 影響範囲
-- UI / API / DB
-
-## メモ
-- リスク / 次の一手
-# ─────────────────────────────
-# END: .github/PULL_REQUEST_TEMPLATE.md
-# ─────────────────────────────
-
-
-# ─────────────────────────────
-# BEGIN: docs/TASKS_BOOTSTRAP.md
-# ─────────────────────────────
-# Cursor向け 初回タスクリスト（順番厳守）
-
-1) スキャフォールド
-- Next.js(App Router) 初期化、/app 配下に 1画面UI（InputBar/ProposalList/ProposalCard/ConfirmButton/MBMeter）
-- ESLint/Prettier/Playwright 設定
-
-2) DB & Prisma
-- Postgres 接続（.env参照）、schema.prisma に users/profiles/proposals/decisions/events を定義
-- マイグレーション実行
-
-3) API – propose
-- Node.js runtime を宣言
-- LLM呼び出し→ proposals[2] を返す（duration_min/slot 付与）
-
-4) API – confirm
-- Node.js runtime を宣言
-- .ics 生成→DLレスポンス（ヘッダ仕様厳守）、decisions/events を保存、MBを返す
-
-5) E2E
-- 7秒入力(モック)→2提案→1クリック→.ics存在 で PASS
-
-6) 計測 & ダッシュボード
-- 必須イベント送信 / 今日のMB合計表示
-
-7) Silent‑Mode & フォールバック
-- 音声不可→即テキスト / 失敗時テンプレA/B提示
-
-完了後：README 更新・GIF録画・PR作成
-
-vNext（MVP+）
-8) Intentスキーマ定義（JSON/Zod）と Bus 実装
-9) /api/plan 実装（PlanA/B生成）
-10) ConfirmSheet UI（要約＋チェック＋Confirm once）
-11) Connector: Calendar.Create / Messenger.Send の並列実行
-12) 監査ログ / ロールバック / リトライ
-# ─────────────────────────────
-# END: docs/TASKS_BOOTSTRAP.md
-# ─────────────────────────────
+# 2) Confirm once（pl1を確定）
+curl -s -X POST "$BASE/v1/confirm" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"plan_id":"pl1"}'
