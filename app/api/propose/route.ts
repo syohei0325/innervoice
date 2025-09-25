@@ -5,17 +5,24 @@ import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { ProposeRequestSchema, validateEnvironment, checkRateLimit, createErrorResponse } from '@/lib/validation';
 
-// 環境変数検証（起動時）
-const env = validateEnvironment();
-
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-});
+// OpenAIクライアントは遅延初期化
+let openai: OpenAI;
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
+    // 環境変数検証とOpenAI初期化（ランタイム時）
+    if (!openai) {
+      const env = validateEnvironment();
+      if (env.OPENAI_API_KEY === 'build-time-default') {
+        throw new Error('OpenAI API key not configured');
+      }
+      openai = new OpenAI({
+        apiKey: env.OPENAI_API_KEY,
+      });
+    }
+
     // レート制限チェック
     const clientIp = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
     if (!checkRateLimit(clientIp, 10, 60000)) {
