@@ -132,6 +132,9 @@ export default function Home() {
       // Show results
       if (data.execution_status === 'success') {
         alert(`✅ ${enabledActions.length}件のアクションが成功しました！`);
+      } else if (data.ics_url) {
+        // Partial success - Calendar added, other connectors not yet implemented
+        alert(`✅ カレンダーに予定を追加しました！\n\n💡 今後のアップデートで、メッセージ送信やリマインダー作成も自動化されます。`);
       } else {
         alert(`⚠️ 一部のアクションが失敗しました。詳細をご確認ください。`);
       }
