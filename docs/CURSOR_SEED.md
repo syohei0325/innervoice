@@ -36,6 +36,11 @@ pnpm dev
 - 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/confirm`で一括実行 → 4) `minutes_back` を受領。
 - 詳細は **docs/PUBLIC_API.md** / **docs/INTENT_SCHEMA.md** / **docs/WEBHOOKS.md** / **docs/CONNECTOR_SDK.md** を参照。
 
+## For Developers（MCP）
+- InnerVoiceは **MCP（Model Context Protocol）** に準拠したツール群を提供します（β）。
+- 使い方：1) MCPサーバURLを用意 → 2) Realtime/ClaudeなどのクライアントにURLを渡す → 3) tools（`calendar.create` / `message.send` / `reminder.create` …）を呼び出し。
+- 詳細は **docs/MCP_OVERVIEW.md** と **docs/MCP_SERVER_SPEC.md** を参照。
+
 ## デザイン原則
 - No Feed / No Scroll
 - One‑shot UX（7秒→2提案→1確定）
@@ -144,6 +149,8 @@ InnerVoice は、スクロールではなく「**決めて、置いて、戻る*
 - 計測：PostHog or GA4（軽量）
 - Public API Gateway（API Key / Rate Limiter / Versioning）
 - Webhooks Dispatcher（署名付与 / リトライ）
+- MCPクライアント：OpenAI Realtime / Anthropic Claude から remote/local MCP に接続
+- MCPサーバ：innervoice-mcp（remote）／innervoice-mcp-local（端末内）— tools=calendar.create/message.send/reminder.create/...
 
 ## データ流れ
 入力(7秒音声/テキスト)
@@ -160,6 +167,11 @@ InnerVoice は、スクロールではなく「**決めて、置いて、戻る*
  → plans[2] を受領 → ユーザーに要約表示（あなたのUI）
  → POST /v1/confirm（plan_id）
  → Webhook `action.executed` / `minutes_back.added`
+
+## Executor（MCP）構成
+- 既定：MCPクライアント → remote/local MCP サーバへ tools を並列実行
+- 代替：ネイティブConnector直叩き（Android Intents / iOS Shortcuts / Graph 等）
+- フォールバック：.ics 単発発行（常時）
 
 ## フォールバック
 - 失敗/遅延：直近の「My Voice」テンプレA/Bを即時提示
@@ -255,27 +267,34 @@ Res: { "results":[
 # END: docs/API_CONTRACTS.md
 # ─────────────────────────
 
+
 # ─────────────────────────
-# BEGIN: docs/PUBLIC_API.md
+# BEGIN: docs/MCP_OVERVIEW.md
 # ─────────────────────────
-# Public API（β）
+# MCP Overview（InnerVoice）
 
-## 概要
-- ベースURL：`${NEXT_PUBLIC_API_BASE_URL}/v1`
-- 認証：`Authorization: Bearer <API_KEY>`
-- レート制限：デフォルト **60 req/min**（Key+IP）。超過→HTTP 429
-- バージョニング：`/v1`（後方互換に配慮）
+## 目的
+- InnerVoiceのPlan/Actionを **MCPツール** として公開し、**複数LLM/音声クライアント**から安全に実行できるようにする。
 
-## Quickstart（cURL）
-```bash
-# 1) Planを取得
-curl -s -X POST "$BASE/v1/plan" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"明日朝30分ラン","context":{"tz":"Asia/Tokyo"}}'
+## ツール一覧（v1）
+- `calendar.create` — 予定を作成
+- `message.send` — メッセージ送信
+- `reminder.create` — リマインド登録
 
-# 2) Confirm once（pl1を確定）
-curl -s -X POST "$BASE/v1/confirm" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"plan_id":"pl1"}'
+## Plan→MCP ツールのマッピング
+- `calendar.create` ⇔ Plan.actions[].action = "calendar.create"
+- `message.send`   ⇔ "message.send"
+- `reminder.create`⇔ "reminder.create"
+
+## 接続方法（例）
+- **OpenAI Realtime** / **Anthropic Claude** に **MCPサーバURL** を渡すと、上記ツールがそのまま見える。
+- 認証は `Authorization: Bearer <API_KEY>`（必要に応じて）を使用。
+
+```json
+{
+  "mcpServers": [
+    { "name": "innervoice-mcp", "url": "wss://mcp.innervoice.app" }
+    // ,
+    { "name": "innervoice-mcp-local", "url": "ws://127.0.0.1:7777" }
+  ]
+}

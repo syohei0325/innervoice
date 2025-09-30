@@ -1,6 +1,6 @@
 # データモデル
 
-## テーブル
+## テーブル（MVP）
 - users(id, email_hash, created_at)
 - profiles(user_id, tz, display_name, commute_minutes, sleep_window, ng_hours_json, mobility_pref)
 - proposals(id, user_id, payload_json, created_at)       # 2案の内容・所要時間
@@ -8,9 +8,17 @@
 - events(id, user_id, source, minutes_back, meta_json, created_at)
 - deletion_requests(id, user_id, status, requested_at)
 
+## 追加テーブル（MVP+）
+- intents(id, user_id, text, json, created_at)
+- plans(id, user_id, intent_id, actions_json, created_at)
+- executions(id, plan_id, status, results_json, created_at)
+- connectors(id, user_id, provider, enabled, scopes_json, created_at)
+
 ## インデックス
 - decisions(user_id, decided_at)
 - events(user_id, created_at)
+- plans(user_id, created_at)
+- executions(plan_id, created_at)
 
 ## Minutes‑Back 概算（初期）
 - ルール：**提案所要時間短縮分** or **自己申告**の小さい方
