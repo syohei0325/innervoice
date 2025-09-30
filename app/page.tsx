@@ -83,10 +83,16 @@ export default function Home() {
   const handleConfirmMVP = async (proposalId: string) => {
     // Original MVP behavior (fallback)
     try {
+      // 提案データを取得
+      const proposal = proposals.find(p => p.id === proposalId);
+      
       const response = await fetch('/api/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proposal_id: proposalId }),
+        body: JSON.stringify({ 
+          proposal_id: proposalId,
+          proposal: proposal // 提案データも送信
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to confirm proposal');
@@ -94,7 +100,18 @@ export default function Home() {
       const data = await response.json();
       
       // Download .ics file
-      if (data.ics_url) {
+      if (data.ics_content) {
+        // 直接.icsファイルをダウンロード
+        const blob = new Blob([data.ics_content], { type: 'text/calendar' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `innervoice-${data.event_id}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else if (data.ics_url) {
         window.open(data.ics_url, '_blank');
       }
       
@@ -140,7 +157,18 @@ export default function Home() {
       }
       
       // Download .ics file if available
-      if (data.ics_url) {
+      if (data.ics_content) {
+        // 直接.icsファイルをダウンロード
+        const blob = new Blob([data.ics_content], { type: 'text/calendar' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `innervoice-${data.event_id || Date.now()}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else if (data.ics_url) {
         window.open(data.ics_url, '_blank');
       }
       
