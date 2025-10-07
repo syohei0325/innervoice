@@ -1,7 +1,7 @@
 {
-  "name": "innervoice",
+  "name": "yohaku",
   "version": "1.0.0",
-  "description": "7秒で「決めて、置く」。スクリーンから人を解放する相棒",
+  "description": "7秒で「決めて、置く」。スクリーンから人を解放する相棒 - LifeOps OS",
   "main": "index.js",
   "directories": {
     "doc": "docs"

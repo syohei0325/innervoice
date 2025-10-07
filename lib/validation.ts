@@ -17,6 +17,11 @@ export const ConfirmRequestSchema = z.object({
   proposal_id: z.string().optional(),
   plan_id: z.string().optional(),
   enabled_actions: z.array(z.string()).optional(),
+  proposal: z.object({
+    title: z.string(),
+    slot: z.string(),
+    duration_min: z.number(),
+  }).optional(),
 }).refine(data => data.proposal_id || data.plan_id, 'Either proposal_id or plan_id is required');
 
 // 環境変数検証（ビルド時安全）
