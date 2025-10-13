@@ -118,6 +118,12 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 - **Voice Calls (SIP) β**: 予約/キャンセル/再配達などを**電話**で完了。MCP `call.place` を用い、transcript→summary→Planの後続実行。
 - 詳細は **docs/OS_INTEGRATIONS.md** / **docs/CALL_TEMPLATES.md** / **docs/PRD_CALL_OS.md** を参照。
 
+## For ChatGPT Apps（Yohaku Lite）
+- ChatGPT内で動く**超軽量版**。**7→2→1（Cal＋Email）**と**Why‑this**を実装。
+- 開発：**Apps SDK（MCP準拠）**＋既存API（/api/propose | /api/plan | /api/confirm | .ics）を利用。**Developer Mode**で内テスト。
+- 配布：**Appsディレクトリ**への提出を前提に、**最小権限/透明な同意/データ最小化**で審査対応。
+- 詳細は **docs/YOHAKU_LITE.md** を参照。
+
 ## デザイン原則
 - No Feed / No Scroll
 - One‑shot UX（7秒→2提案→1確定）
