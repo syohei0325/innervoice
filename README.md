@@ -5,14 +5,14 @@
 - 入力：**7秒**（音声 or 無音テキスト）
 - 出力：**2つの提案**（所要時間ラベル付き）
 - 確定：**1タップで .ics を発行**（片方向フォールバックを常時有効）
-- 画面：**1枚だけ**（Input / Proposals / Confirm / Minutes‑Back）
+- 画面：**1枚だけ**（Input / Proposals / Confirm / **Value Receipt**）
 
 ## 次の価値（MVP+）: Intent バス & Confirm once Multi‑Action
 - 入力：**7秒**（声/無音テキスト）→ **Intent化**（やりたいことをJSON化）
 - 提案：**2つの実行プラン**（例：A=カレンダー+メッセ+リマインド / B=代替案）
 - 確定：**Confirm once（1回のOK）**で**複数アクションを並列実行**（Calendar / Messenger / Reminders 等）
 - フォールバック：**.ics一発発行**（MVPを常時バックアップ経路として維持）
-- 可視化：**Minutes‑Back**は**束ねた実行**で短縮できた合計分を加算
+- 可視化：**Verified Minutes‑Back（vMB）**と**Friction Events Avoided（FEA）**を加算（保守的表示）
 
 ## Pack 拡張（LifeOps OS）
 - **Money Pack**：家計の交渉・解約・乗換（成功報酬/アフィ対応）
@@ -22,8 +22,9 @@
 - 共通：**ConfirmOS**（承認/取消/監査/二重承認）で安全性を規格化
 
 ## 北極星（PMF検証KPI）
-- Median **Minutes‑Back ≥ 15分/日**（D30継続ユーザー）
-- **Screen‑off完了率 ≥ 70%**
+- Median **vMB ≥ 15分/日**（D30継続ユーザー｜保守的推定）
+- **Screen‑off完了率 ≥ 70%（Carモード含む）**
+- **FEA ≥ 10/週（p50）**（アプリ跨ぎ/コピペ/フォーム入力などの削減件数）
 - D1≥60% / D7≥35% / D30≥25% / 日あたり確定≥3 / **誤実行率 < 0.5%** / NPS≥50
 
 ## 開発クイックスタート
@@ -105,13 +106,13 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 
 ## For Developers（Public API）
 - 開発者向けの**公開API/SDK/Webhook**を提供（β）。
-- 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/confirm`で一括実行 → 4) `minutes_back` を受領。
+- 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/approve`で承認ID発行 → 4) `POST /v1/confirm`で一括実行 → 5) `minutes_back` と `friction_saved` を受領。
 - 詳細は **docs/PUBLIC_API.md** / **docs/INTENT_SCHEMA.md** / **docs/WEBHOOKS.md** / **docs/CONNECTOR_SDK.md** を参照。
 
 ## For Developers（MCP）
 - Yohakuは **MCP（Model Context Protocol）** に準拠したツール群を提供（β）。
 - 使い方：1) MCPサーバURLを用意 → 2) Realtime/ClaudeなどのクライアントにURLを渡す → 3) tools（`calendar.create` / `message.send` / `reminder.create` / `call.place` / `places.search` / `reservations.book` / `parking.reserve` / `ride.order` / `pay.authorize` / `notify.push`）を呼び出し。
-- 詳細は **docs/MCP_OVERVIEW.md** を参照。
+- **署名・審査・スコープ**の三点で安全運用（マーケット想定）。詳細は **docs/MCP_OVERVIEW.md**。
 
 ## For Developers（OS & Calls）
 - **OS Deep Integrations**: iOS Shortcuts / App Intents, Android Intents, Windows (Graph/Notifications)。OSからYohakuを直接起動し、フォローアップをバックグラウンド実行。
@@ -127,16 +128,17 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 ## デザイン原則
 - No Feed / No Scroll
 - One‑shot UX（7秒→2提案→1確定）
-- Minutes‑Back / Money‑Back 可視化
+- **Value Receipt**：成功時に**軽量トースト（2–3秒）**＋**任意の週次カード**＋**奥のトラストパネル**（既定OFF）
 - Silent First（音声×テキスト両立）
 - データはユーザーのもの（エクスポート/削除）
 - アプリ横断は **Intent バス**で配車し、**Confirm once**で一括実行（透明性ある要約を必ず表示）
 - Personalization‑first（**Vibe Profile / Taste Embedding / Why‑this** で提案文と確認文を個人最適）
-- **Trustパネル常設**（誤実行/取消成功/平均承認時間）＋**理由フィードバック**の1タップ収集
+- **Trustパネル常設**（誤実行/取消成功/平均承認時間/証拠係数）＋**理由フィードバック**の1タップ収集
+- **プロバイダ分離**：Google検索→Googleマップ／Apple検索→Appleマップに統一（TOS遵守）
 
 ## 将来像（3年の絵 / Super‑App by Voice）
 - 目標：**「Yohakuを開いて話すだけで、アプリ横断の用事が全部終わる」**。80/20で"毎日の用事"をカバーし、残りは通話/人に委譲。
 - コア：**7→2→1（Confirm once）**、**MCP**（places/reservations/parking/ride/pay/call/notify）、**OS深統合**（Shortcuts/Intents/通知1タップ）。
 - 学習：**Taste Embedding**（好みベクトル）と**Partnerモード**（同意ベース共有）で"あなた/相手"に最適化。
-- 安全：**要約の強制表示/取消/ロールバック/監査**、金額は**二重承認**。
+- 安全：**要約の強制表示/取消/ロールバック/監査**、金額は**二重承認**、車内は**読み上げ中心**。
 - 詳細：**docs/FUTURE_VISION.md** / **docs/TASTE_MODEL.md** / **docs/PARTNER_MODE.md** / **docs/CONFIRM_OS.md** / **docs/PACKS_OVERVIEW.md** を参照。

@@ -13,14 +13,14 @@
 - 入力：**7秒**（音声 or 無音テキスト）
 - 出力：**2つの提案**（所要時間ラベル付き）
 - 確定：**1タップで .ics を発行**（片方向フォールバックを常時有効）
-- 画面：**1枚だけ**（Input / Proposals / Confirm / Minutes‑Back）
+- 画面：**1枚だけ**（Input / Proposals / Confirm / **Value Receipt**）
 
 ## 次の価値（MVP+）: Intent バス & Confirm once Multi‑Action
 - 入力：**7秒**（声/無音テキスト）→ **Intent化**（やりたいことをJSON化）
 - 提案：**2つの実行プラン**（例：A=カレンダー+メッセ+リマインド / B=代替案）
 - 確定：**Confirm once（1回のOK）**で**複数アクションを並列実行**（Calendar / Messenger / Reminders 等）
 - フォールバック：**.ics一発発行**（MVPを常時バックアップ経路として維持）
-- 可視化：**Minutes‑Back**は**束ねた実行**で短縮できた合計分を加算
+- 可視化：**Verified Minutes‑Back（vMB）**と**Friction Events Avoided（FEA）**を加算（保守的表示）
 
 ## Pack 拡張（LifeOps OS）
 - **Money Pack**：家計の交渉・解約・乗換（成功報酬/アフィ対応）
@@ -30,8 +30,9 @@
 - 共通：**ConfirmOS**（承認/取消/監査/二重承認）で安全性を規格化
 
 ## 北極星（PMF検証KPI）
-- Median **Minutes‑Back ≥ 15分/日**（D30継続ユーザー）
-- **Screen‑off完了率 ≥ 70%**
+- Median **vMB ≥ 15分/日**（D30継続ユーザー｜保守的推定）
+- **Screen‑off完了率 ≥ 70%（Carモード含む）**
+- **FEA ≥ 10/週（p50）**（アプリ跨ぎ/コピペ/フォーム入力などの削減件数）
 - D1≥60% / D7≥35% / D30≥25% / 日あたり確定≥3 / **誤実行率 < 0.5%** / NPS≥50
 
 ## 開発クイックスタート
@@ -41,13 +42,13 @@ pnpm dev
 
 ## For Developers（Public API）
 - 開発者向けの**公開API/SDK/Webhook**を提供（β）。
-- 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/confirm`で一括実行 → 4) `minutes_back` を受領。
+- 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/approve`で承認ID発行 → 4) `POST /v1/confirm`で一括実行 → 5) `minutes_back` と `friction_saved` を受領。
 - 詳細は **docs/PUBLIC_API.md** / **docs/INTENT_SCHEMA.md** / **docs/WEBHOOKS.md** / **docs/CONNECTOR_SDK.md** を参照。
 
 ## For Developers（MCP）
 - Yohakuは **MCP（Model Context Protocol）** に準拠したツール群を提供（β）。
 - 使い方：1) MCPサーバURLを用意 → 2) Realtime/ClaudeなどのクライアントにURLを渡す → 3) tools（`calendar.create` / `message.send` / `reminder.create` / `call.place` / `places.search` / `reservations.book` / `parking.reserve` / `ride.order` / `pay.authorize` / `notify.push`）を呼び出し。
-- 詳細は **docs/MCP_OVERVIEW.md** を参照。
+- **署名・審査・スコープ**の三点で安全運用（マーケット想定）。詳細は **docs/MCP_OVERVIEW.md**。
 
 ## For Developers（OS & Calls）
 - **OS Deep Integrations**: iOS Shortcuts / App Intents, Android Intents, Windows (Graph/Notifications)。OSからYohakuを直接起動し、フォローアップをバックグラウンド実行。
@@ -62,18 +63,19 @@ pnpm dev
 ## デザイン原則
 - No Feed / No Scroll
 - One‑shot UX（7秒→2提案→1確定）
-- Minutes‑Back / Money‑Back 可視化
+- **Value Receipt**：成功時に**軽量トースト（2–3秒）**＋**任意の週次カード**＋**奥のトラストパネル**（既定OFF）
 - Silent First（音声×テキスト両立）
 - データはユーザーのもの（エクスポート/削除）
 - アプリ横断は **Intent バス**で配車し、**Confirm once**で一括実行（透明性ある要約を必ず表示）
 - Personalization‑first（**Vibe Profile / Taste Embedding / Why‑this** で提案文と確認文を個人最適）
-- **Trustパネル常設**（誤実行/取消成功/平均承認時間）＋**理由フィードバック**の1タップ収集
+- **Trustパネル常設**（誤実行/取消成功/平均承認時間/証拠係数）＋**理由フィードバック**の1タップ収集
+- **プロバイダ分離**：Google検索→Googleマップ／Apple検索→Appleマップに統一（TOS遵守）
 
 ## 将来像（3年の絵 / Super‑App by Voice）
 - 目標：**「Yohakuを開いて話すだけで、アプリ横断の用事が全部終わる」**。80/20で“毎日の用事”をカバーし、残りは通話/人に委譲。
 - コア：**7→2→1（Confirm once）**、**MCP**（places/reservations/parking/ride/pay/call/notify）、**OS深統合**（Shortcuts/Intents/通知1タップ）。
 - 学習：**Taste Embedding**（好みベクトル）と**Partnerモード**（同意ベース共有）で“あなた/相手”に最適化。
-- 安全：**要約の強制表示/取消/ロールバック/監査**、金額は**二重承認**。
+- 安全：**要約の強制表示/取消/ロールバック/監査**、金額は**二重承認**、車内は**読み上げ中心**。
 - 詳細：**docs/FUTURE_VISION.md** / **docs/TASTE_MODEL.md** / **docs/PARTNER_MODE.md** / **docs/CONFIRM_OS.md** / **docs/PACKS_OVERVIEW.md** を参照。
 # ───────────────
 # END: README.md
@@ -90,24 +92,28 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
 ## プロダクト憲法
 1. 無限フィードは作らない
 2. 1画面で完結（7秒→2→1）
-3. Minutes‑Back / Money‑Back を常時表示
+3. **Value Receiptを最小で見せる**（軽量トースト／任意の週次カード／奥のトラストパネル）
 4. 音声不能時は即テキスト
 5. データ最小化・透明性（要約＋操作メタのみ長期保存）
 6. 予約/購入/通話は勝手に行わない（**Confirm once**で必ず承認）
 7. 失敗を恐れず速く学ぶ（データで意思決定）
 8. アプリ横断は **Intent バス**（スパゲッティ連携を回避）
 9. 承認は **ConfirmOS** で規格化（取消/ロールバック/監査/二重承認）
+10. 車内は**読み上げ中心**・操作最小（Carガイドライン準拠）
 
 ## 将来像（World Model）
 - **声で完了する横断OS**：地図/予約/駐車/移動/連絡/決済を Plan→Confirm once で連鎖実行。
 - **好みの学習**：承認/却下/再訪/滞在時間から Taste Embedding を更新し、提案の当たり率を上げる。
 - **Partnerモード**：相手の同意のもと、NG食材/価格帯/雰囲気/移動手段を最小共有（期限付きトークン）。
 - **フォールバック**：APIが無い先は `call.place`（通話）＋SMSで確定。常に .ics 退避。
-- **KPI**：
+
+## KPI（保守的表示）
 - **Top‑1採択率 ≥ 55%**
 - **編集距離中央値 ≤ 20%**（提案→確定の差分）
 - **Time‑to‑Confirm p50 ≤ 3秒**
-- Taste命中率≥40%。
+- **Screen‑off完了率 ≥ 70%（車内を重視）**
+- **Verified Minutes‑Back（vMB）** と **Friction Events Avoided（FEA）** を並行計測
+- Taste命中率≥40%
 # ────────────────────
 # END: docs/VISION.md
 # ────────────────────
@@ -130,12 +136,15 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
 - 7秒入力（音声/無音）→**2提案**表示→**.ics生成DL**まで **p50≤1.5s**
 - 各提案に **duration_min** と開始時刻候補（slot）
 - エラー時は**静音テキストへ自動フォールバック**
-- **Minutes‑Back** が今日分に加算・表示
+- **Value Receipt**：軽量トースト（FEA件数中心／時間は小さく保守的）
+- **vMB/FEAを記録**（UI常時表示はしない）
 - **PIIは保存しない**（要約+操作メタのみサーバ保存）
 
 ## 計測イベント（必須）
 - iv.input_started / iv.proposals_shown / iv.confirmed / iv.ics_downloaded  
-- iv.minutes_back_added{minutes,source} / iv.error{type} / iv.nps_submitted
+- iv.minutes_back_added{minutes,confidence,source}  
+- iv.friction_saved{type,qty,evidence}  
+- iv.error{type} / iv.nps_submitted
 # ─────────────────────
 # END: docs/PRD_MVP.md
 # ─────────────────────
@@ -147,7 +156,7 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
 # PRD – MVP+「Intentバス & Confirm once Multi‑Action」
 
 ## 目的（MVPからの拡張）
-- .ics片方向のMVPに **“アプリ横断の一括実行”** を追加し、**Minutes‑Back**を跳ねさせる。
+- .ics片方向のMVPに **“アプリ横断の一括実行”** を追加し、**vMB/FEA** を跳ねさせる。
 
 ## ユースケース（最小）
 1) 朝の段取り：カレンダー追加 + 家族へ一言メッセ + 起床リマインド  
@@ -159,7 +168,7 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
 - 成功/失敗は個別に可視化し、**部分成功**でも全体は完了扱い（失敗分はリトライ/再提案）
 - **.ics フォールバック**は常時有効（ネットワーク遅延や権限未連携時）
 - **p50 レイテンシ ≤ 1.5s**（提案表示まで）。実行はバックグラウンドで継続し結果通知
-- **Minutes‑Back**は束ねた実行の短縮見積を加算（後で実測化）
+- **Value Receipt**：軽量トースト＋任意の週次カードでvMB/FEAを保守的表示
 - **Why‑this‑for‑you**：各プランに「あなた向けの理由」最大3点を表示（例：朝型/徒歩15分圏/過去採択）
 - **理由フィードバック**：👍/👎 とタグ（高い/遠い/混雑/暗い等）を1タップ収集→Taste更新
 
@@ -228,6 +237,10 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
 - Partner Consent サービス（期限付きトークン/スコープ）
 - Packs：Money/Civic/Family/Care コネクタ（無い先は `call.place` フォールバック）
 
+## レイテンシSLO（提案表示まで）
+- **ASR ≤ 250ms** / **意図→2案 ≤ 700ms** / **UI描画 ≤ 300ms** / **合計 p50 ≤ 1.5s**
+- 違反時は**自動フォールバック**（.ics/SMS/静音テキスト）
+
 ## データ流れ
 入力(7秒音声/テキスト)
  → `POST /api/propose`（LLMで2案生成）
@@ -235,7 +248,7 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
  → ユーザーが1案を選択 → **/api/plan**（Intent化→PlanA/B を生成）
  → **ConfirmOS**（要約＋トグル＋取消猶予＋二重承認）
  → **/api/confirm**（Plan並列実行：Calendar/Messenger/...）＋ **.icsフォールバック**
- → 結果通知 / Minutes‑Back 加算 / 監査ログ
+ → 結果通知 / vMB/FEA 加算 / 監査ログ
 
 ## データ流れ（外部開発者）
 外部App
@@ -243,7 +256,7 @@ Yohaku は、スクロールではなく「**決めて、置いて、戻る**」
  → plans[2] を受領 → ユーザーに要約表示（あなたのUI）
  → `POST /v1/approve`（ConfirmOS）→ `approve_id`
  → `POST /v1/confirm`（plan_id, approve_id）
- → Webhook `action.executed` / `minutes_back.added`
+ → Webhook `action.executed` / `minutes_back.added` / `friction_saved`
 
 ## データ流れ（通話）
 Intent（7秒の音声/テキスト）
@@ -285,6 +298,7 @@ Intent（7秒の音声/テキスト）
 - **vibe_profiles(user_id, tone, decisiveness, frugality, notification_style, language, updated_at)**
 - **reason_feedbacks(id, user_id, plan_id, reason_key, vote_bool, tag, created_at)**
 - **personalization_stats(user_id, date, top1_rate, edit_distance_pct, ttc_p50_ms, created_at)**
+- **friction_events(id, user_id, type, qty, evidence, action, created_at)** # FEA集計用
 
 ## インデックス
 - decisions(user_id, decided_at)
@@ -292,10 +306,11 @@ Intent（7秒の音声/テキスト）
 - approvals(approve_id)
 - audit_logs(user_id, at)
 
-## Minutes‑Back / Money‑Back 推定（初期）
-- MB：**提案所要時間短縮分** or **自己申告**の小さい方
-- ¥B：カテゴリ別の成功報酬/交渉結果を累積
-- 将来：移動/画面/完了ログと突合し実測化
+## Verified Minutes‑Back / FEA 推定（保守）
+- **vMB_action = max(0, Baseline_p10(action, user) − (Confirm_ms + 実行レイテンシ + オーバーヘッド)) × EvidenceFactor**
+  - EvidenceFactor：1.0=実測/外部往復含む, 0.6=類推, 0.3=初期テーブルのみ
+- **FEAカテゴリ**：`copy_paste_avoided` / `app_switch_avoided` / `typing_avoided_chars` / `search_avoided` / `form_fill_avoided` / `call_tree_avoided`
+- **UIは件数が主役**、時間は小さく（保守的）添える
 
 ## 追加テーブル（MVP+）
 - intents(id, user_id, text, json, created_at)
@@ -353,7 +368,8 @@ Res: { "results":[
   {"action":"calendar.create","status":"ok","id":"evt_123"},
   {"action":"message.send","status":"ok","id":"msg_456"},
   {"action":"reminder.create","status":"ok","id":"rmd_789"}
-], "minutes_back":18 }
+], "minutes_back":18, "minutes_back_confidence":1.0,
+   "friction_saved":[{"type":"copy_paste_avoided","qty":1,"evidence":"measured"}] }
 
 ## GET /api/vibe
 Res:
@@ -372,7 +388,7 @@ Res:
 { "reasons":["朝型×過去採択","徒歩<=15分","天気=晴"] }
 
 ## 補助API
-- `POST /api/estimate` → { mb_min, mb_max, yb_estimate }
+- `POST /api/estimate` → { mb_min, mb_max, confidence, yb_estimate }
 - `POST /api/consent`  → Partner/用途別同意の発行/更新
 - `POST /api/document` → 申請書/証憑生成（Civic）
 
@@ -390,7 +406,7 @@ Res:
 # PRD – MVP++「通話（SIP）& 端末深統合」
 
 ## 目的
-- 7秒→2案→Confirm once を**電話での予約/キャンセル/連絡**にも拡張し、**画面オフ完了率**と **Minutes‑Back** を押し上げる。
+- 7秒→2案→Confirm once を**電話での予約/キャンセル/連絡**にも拡張し、**画面オフ完了率**と **vMB/FEA** を押し上げる。
 
 ## ユースケース（最小3本）
 1) 病院予約：通話で希望日時を確定→カレンダー作成→家族へSMS共有  
@@ -409,7 +425,7 @@ Res:
 - 通話成功率 ≥ 90%（人が出た通話のうち合意が取れた割合）
 - Screen‑off完了率 ≥ 70%
 - p50（提案表示まで） ≤ 1.5s（通話はバックグラウンドで継続）
-- Minutes‑Back（通話ユースケース）中央値 ≥ 6分/実行
+- vMB（通話ユースケース）中央値 ≥ 6分/実行
 
 ## 非機能/安全
 - 録音は既定OFF／ON時は**両者への告知**を読み上げ
@@ -428,10 +444,12 @@ Res:
 ## iOS
 - **Shortcuts / App Intents**：`Confirm once` / `Add to Calendar` / `Send Message` を公開。音声SiriPhraseで起動。
 - **通知アクション**：Pushのボタンで Confirm/Cancel。バックグラウンドで Plan 実行。
+- **Carモード**：読み上げ中心・操作最小。候補は**2件まで**読み上げ→“AでOK？”でナビ起動。
 
 ## Android
 - **Intents**：`ACTION_SEND`（メッセ）/ カレンダー挿入 / 通知アクション。
 - **デフォルト音声**との共存：音声入力→Yohakuの `One‑shot` にディープリンク。
+- **Android Auto**：Maps URLs / Intentsでナビ委譲。後続でPOIテンプレ対応を検討。
 
 ## Windows（デスクトップ）
 - **Notifications + Hotkey**：ホットキー→7秒入力→2案→Confirm once。
@@ -440,6 +458,7 @@ Res:
 ## 設計方針
 - 端末側で**ASR/意図分類**までを先行実行（レイテンシ短縮）
 - 実行は Plan→Confirm→**MCP/ネイティブ** の優先順。常に **.ics** をフォールバックに保持
+- **プロバイダ分離**：Google系API→Googleマップ、Apple系→Appleマップ
 # ─────────────────────────
 # END: docs/OS_INTEGRATIONS.md
 # ─────────────────────────
@@ -483,11 +502,12 @@ Plan.actions:
 # Distribution Playbook（配布の型）
 
 1) **.ics 招待のフッター**：`Scheduled with Yohaku` を自動付与→受信者がワンクリック体験
-2) **Minutes‑Back / Money‑Back 週次カード共有**：SNSと職場にシェア→招待リンクで導入
-3) **テンプレ/コネクタ市場（MCP）**：外部が `call.place` などを拡張→課金分配（審査制/署名必須）
+2) **週次カード共有（任意ON）**：**FEA件数**＋**保守的vMB**をSNSと職場にシェア→招待リンクで導入
+3) **テンプレ/コネクタ市場（MCP）**：外部が `call.place` などを拡張→課金分配（**署名/審査/スコープ**必須）
 4) **OSディープリンク**：ショートカット/インテントから起動→日常の入口を占有
-5) **Trustパネルの共有**：今週の誤実行/取消成功/承認時間のカードをSNSで共有→信頼×導線
+5) **Trustパネルの共有**：今週の誤実行/取消成功/承認時間/証拠係数のカードをSNSで共有→信頼×導線
 6) **ChatGPT Appsディレクトリ**：Yohaku Lite を出店。ディレクトリ流入→本体Proへ導線
+7) **リージョンゲート**：EUは後追い。AI Act/データ移転の基準に合わせて提供範囲を制御
 # ─────────────────────────
 # END: docs/DISTRIBUTION_PLAYBOOK.md
 # ─────────────────────────
@@ -515,7 +535,7 @@ Plan.actions:
 
 ### 共通
 - ConfirmOSを適用（要約/取消/監査/二重承認）
-- KPI：完了率 / MB / ¥B / 誤実行 / Screen‑off
+- KPI：完了率 / vMB / ¥B / 誤実行 / Screen‑off
 # ─────────────────────────
 # END: docs/PACKS_OVERVIEW.md
 # ─────────────────────────
@@ -530,8 +550,8 @@ Plan.actions:
 - Yohakuを開いて話すだけで、**地図/予約/駐車/移動/連絡/決済**が**Plan→Confirm once**で連鎖実行される。APIが無い先は**通話で確定**。
 
 ## フェーズ
-- **Now–6m**：Calendar/Message/Reminders/通話テンプレ。近場提案（位置/営業時間/混雑）と駐車の最小連携。
-- **6–12m**：Taste Embedding v1、Partnerモードβ、`places.search / reservations.book / parking.reserve / ride.order` のMCP化。通知1タップ承認を普及。
+- **Now–6m**：Calendar/Message/Reminders/通話テンプレ。近場提案（位置/営業時間/混雑）と駐車の最小連携。**CarモードKPIを本番運用**。
+- **6–12m**：Taste Embedding v1、Partnerモードβ、`places.search / reservations.book / parking.reserve / ride.order` のMCP化。通知1タップ承認を普及。**EUゲート/データ最小化**を強化。
 - **12–36m**：`pay.authorize` と実店舗/事業者連携、開発者向けテンプレ市場の拡大、協調エージェント（複数LLM）運用。
 
 ## コアシステム
@@ -540,10 +560,10 @@ Plan.actions:
 - **Partnerモード**：同意ベースで最小共有（NG食材/価格帯/雰囲気/移動手段/当日位置）。トークンは期限付き。
 
 ## KPI
-- MB中央値≥15分/日、Screen‑off≥70%、Confirm中央値≥2.2、**p50≤1.5s**、通話成功≥90%/誤実行<0.5%、Taste命中率≥40%。
+- vMB中央値≥15分/日、Screen‑off≥70%、Confirm中央値≥2.2、**p50≤1.5s**、通話成功≥90%/誤実行<0.5%、Taste命中率≥40%。
 
 ## ガードレール
-- 感情推定は既定OFF。金額操作は**別承認**。全操作に**要約/取消/監査ログ**を付与。
+- 感情推定は既定OFF。金額操作は**別承認**。全操作に**要約/取消/監査ログ**を付与。**プロバイダ分離**を遵守。
 # ─────────────────────────
 # END: docs/FUTURE_VISION.md
 # ─────────────────────────
@@ -592,17 +612,16 @@ Confirm Sheet に必須:
 
 ## 3) Pulse（受動2案、No‑Feed）
 schedule: 朝/就寝前のみ
-payload: top2_plans + minutes_back_estimate
+payload: top2_plans + vMB_estimate + FEA_count
 UX: 通知→1タップConfirm（Screen‑off）
 guardrails: 過剰通知抑制、静音時間厳守
 
 ## 4) KPI（個人化の質）
-- Top‑1採択率 / 編集距離 / Time‑to‑Confirm / MB‑lift（個人化で増えた分）
+- Top‑1採択率 / 編集距離 / Time‑to‑Confirm / **MB‑lift & FEA‑lift（個人化での増分）**
 
 ## 5) セーフティ
 - 仕事/公的先へのメッセは礼節モードへ自動切替
 - 学習は端末先行（PDV）→サーバ再ランク。長期保存は要約＋統計のみ
-
 # ─────────────────────────
 # END: docs/PERSONALIZATION.md
 # ─────────────────────────
@@ -639,12 +658,14 @@ guardrails: 過剰通知抑制、静音時間厳守
 - **ConfirmOS**（取消/監査/二重承認/取り消し猶予）を完成
 - 通話テンプレ本番（病院/飲食/配送）と**誤実行<0.5%**
 - OS深統合の普及（通知1タップ承認）
+- **CarモードKPI**の本番運用（読み上げ中心/操作最小）
 
 ## 6–12m（面の拡張）
-- Taste v1 / Partner β / MCP: places/reservations/parking/ride
+- Taste v1 / Partner β / MCP: places/reservations/parking/ride（**署名・審査・スコープ**）
 - **Money Pack（JP）**：携帯/電力/光の交渉・乗換を開始（¥B実測）
 - **Civic Top10**：転入出/免許/ビザ予約などの書類生成＋枠取り
 - SMBパッケージ（共有テンプレ/監査/SSO/Allowlist）で有料50チーム
+- **EUリージョンゲート**とデータ最小化の運用開始
 
 ## 12–24m（深掘り）
 - `pay.authorize` の導入（別承認UI）、事業者連携を拡大
@@ -696,66 +717,3 @@ guardrails: 過剰通知抑制、静音時間厳守
     { "name": "yohaku-mcp-local", "url": "ws://127.0.0.1:7777" }
   ]
 }
-```
-# ─────────────────────────
-# END: docs/MCP_OVERVIEW.md
-# ─────────────────────────
-
-
-# ─────────────────────────
-# BEGIN: docs/YOHAKU_LITE.md
-# ─────────────────────────
-# YOHAKU LITE – ChatGPT内で動く“超軽量版”
-
-## 目的（Why）
-- **配布の面を最大化**：ChatGPT内の巨大動線（Appsディレクトリ）で**広告費ゼロの獲得**を実現。
-- **摩擦ゼロ体験**：インストール/権限連携前でも**会話内で価値→確定**まで到達。
-- **本体をブースト**：Liteで得た**提案→確定ログ/理由タグ（Why‑this）**が**Taste/Vibe**の学習を加速。
-
-## スコープ（MVP）
-- **7→2→1**：7秒入力→**2提案**→**1タップ確定**。
-- **アクションは2つに限定**：`calendar.create` + `message.send(email)`。
-- **Why‑this‑for‑you**：各提案に“あなた向けの理由”最大3点を表示、👍/👎＋タグを収集。
-- **Confirm once**＋**取消猶予 10秒**＋**監査ログ**（ConfirmOS準拠）。
-- **.ics フォールバック**：権限未連携でも価値を提供。
-
-## UI（Apps SDK）
-- 提案カード（A/B）／Confirmモーダル（要約・トグル・Undo表示）／完了トースト（Minutes‑Back加算）。
-- 会話内で完結する**インタラクティブUI**。No‑Feed/No‑Scroll を踏襲。
-
-## 実装（既存資産の再利用）
-- API：`/api/propose` → `/api/plan` → `POST /api/confirm`（idempotency必須） → `.ics`。
-- MCP：`calendar.create` / `message.send` をAppsから直接呼び出し可能（MCP準拠）。
-- 品質運用：**AgentKit Evals**で **Top‑1採択率 / 編集距離 / Time‑to‑Confirm** を自動集計。必要に応じて **RFT** でツール選択を最適化。
-
-## KPI / Go・No‑Go（4週で判定）
-- **Top‑1採択率 ≥ 55%**、**TTC p50 ≤ 3s**、**初回体験CVR ≥ 20%**。
-- **Lite単体 MRR ≥ $500** *or* **本体Proへの送客 ≥ 5%**。
-- ※ 2項目以上未達なら Lite は一旦凍結 → 本体へ100%集中。
-
-## 収益（初期）
-- Liteサブスク（¥300–¥600/月）／**Instant Checkout（ACP）**による小口課金（上限・二重承認）。
-- 本体Proへのアップセル（OS統合/通話/行政）。
-
-## 配布
-- **Developer Mode**で内テスト → **Appsディレクトリ**に審査提出（最小権限/透明な同意/データ最小化）。
-
-## リージョン/ローンチ
-- **US/JP 先行**。**EUは後追い**（規制/提供範囲の都合）。アプリ内部で**リージョンゲート**を実装。
-
-## セーフティ/プライバシー
-- ConfirmOS準拠（要約/取消/監査/二重承認/Idempotency）。
-- **PII最小化**：保存は要約＋操作メタのみ。理由タグは匿名化。
-
-## ロードマップ（14日）
-- Day 1–3：Apps UI（提案カード/Confirm）＋ `.ics` フォールバック。
-- Day 4–7：Why‑this/理由タグ収集 → **Evals**導入（Top‑1/TTC/編集距離）。
-- Day 8–10：審査パッケージ化（権限説明/プライバシー文面）。
-- Day 11–14：**Instant Checkout（ACP）**を1ユースケースだけ導入（上限＋二重承認）。
-
-## 計測イベント（lite.*）
-- `lite.session_started` / `lite.proposals_shown` / `lite.whythis_shown` / `lite.reason_feedback` / `lite.confirmed` / `lite.ics_downloaded` / `lite.checkout_succeeded`。
-
-# ─────────────────────────
-# END: docs/YOHAKU_LITE.md
-# ─────────────────────────
