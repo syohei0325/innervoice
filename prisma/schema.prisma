@@ -24,6 +24,9 @@ model User {
   intents          Intent[]
   plans            Plan[]
   connectors       Connector[]
+  memories         Memory[]
+  observations     Observation[]
+  nudges           Nudge[]
 
   @@map("users")
 }
@@ -149,4 +152,83 @@ model Connector {
 
   @@unique([userId, provider])
   @@map("connectors")
+}
+
+// Doraemon Mode: Memory OS
+model Memory {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  kind       String    // preference|fact|alias|goal|routine|relationship_note|autopilot_rule
+  key        String
+  valueJson  String    @map("value_json")
+  source     String?   // utterance|action|calendar|message_meta|import|manual
+  confidence Float?    @default(1.0)
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId, key])
+  @@map("memories")
+}
+
+// Doraemon Mode: Proactive OS - Observations
+model Observation {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  signal      String   // free_slot|relationship_gap|deadline_near|habit_window|location|open_loop
+  payloadJson String   @map("payload_json")
+  observedAt  DateTime @default(now()) @map("observed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, observedAt])
+  @@map("observations")
+}
+
+// Doraemon Mode: Proactive OS - Nudges
+model Nudge {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  summary    String
+  planJson   String    @map("plan_json")
+  reasonKeys String[]  @map("reason_keys")
+  status     String    @default("shown") // shown|accepted|dismissed|snoozed|expired
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("nudges")
+}
+
+// Doraemon Mode: Relationship Graph
+model ContactGraph {
+  userId      String    @map("user_id")
+  contactId   String    @map("contact_id")
+  tieStrength Float?    @map("tie_strength")
+  lastMetAt   DateTime? @map("last_met_at")
+  lastMsgAt   DateTime? @map("last_msg_at")
+  cadenceDays Int?      @map("cadence_days")
+  channelsJson String?  @map("channels_json")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@id([userId, contactId])
+  @@index([userId, updatedAt])
+  @@map("contact_graph")
+}
+
+// Doraemon Mode: Availability
+model Availability {
+  userId     String   @map("user_id")
+  date       DateTime @db.Date
+  slotsJson  String   @map("slots_json")
+  source     String?  // calendar|manual
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@id([userId, date])
+  @@map("availability")
 }
