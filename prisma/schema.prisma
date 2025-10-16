@@ -232,3 +232,16 @@ model Availability {
   @@id([userId, date])
   @@map("availability")
 }
+
+// Pluggable Memory: Provider Events
+model ProviderEvent {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  provider    String   // supermemory|zep|mem0
+  event       String   // search|health|error
+  payloadJson String   @map("payload_json")
+  at          DateTime @default(now())
+
+  @@index([userId, at])
+  @@map("provider_events")
+}

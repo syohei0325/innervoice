@@ -22,6 +22,11 @@
 - 実行は**Confirm once**（1回のOK）で一括実行、**Undo 10秒**と**監査ログ**は必須。
 - **.icsフォールバック**は常時有効（権限未連携/遅延時でも即価値）。
 
+### Pluggable Memory（外部記憶を差し替え可能）
+- Coreは**自前（Memory OS）**、Doc/Graphは**プロバイダ切替**（Supermemory / Zep / Mem0 等）
+- Providerは**環境変数で選択**＋**A/B**運用、失敗時は**Coreのみ**へ自動降格
+- "Why‑this‑for‑you"に**出典（core|doc）/provider/信頼度**を必ず表示
+
 ### DoraemonモードのKPI（北極星に追加）
 - **Nudge採択率（週） ≥ 25%**
 - **Nudge誤提案率 ≤ 10%**
@@ -145,11 +150,12 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 - **Value Receipt**：成功時に**軽量トースト（2–3秒）**＋**任意の週次カード**＋**奥のトラストパネル**（既定OFF）
 - データはユーザーのもの（エクスポート/削除）
 - アプリ横断は **Intent バス**で配車し、**Confirm once**で一括実行（透明性ある要約を必ず表示）
-- Personalization‑first（**Vibe Profile / Taste Embedding / Why‑this** で提案文と確認文を個人最適）
+- Personalization‑first（**Vibe Profile / Taste Embedding / Why‑this（出典明示）** で提案文と確認文を個人最適）
 - **Trustパネル常設**（誤実行/取消成功/平均承認時間/証拠係数）＋**理由フィードバック**の1タップ収集
 - **プロバイダ分離**：Google検索→Googleマップ／Apple検索→Appleマップに統一（TOS遵守）
 - **ConfirmOS**：要約表示・二重承認（支払い/通話）・取消猶予10秒・監査ログ・ロールバック
 - **Ask→Anticipate**：人が言う前に"そっと提案"。**ナッジは最小で、騒がない。**
+- **Pluggable Memory**：**出典明示**・**乗換自由**・**主権尊重**を守る。
 
 ## 将来像（3年の絵 / Super‑App by Voice）
 - 目標：**「Yohakuを開いて話すだけで、アプリ横断の用事が全部終わる」**。80/20で"毎日の用事"をカバーし、残りは通話/人に委譲。
