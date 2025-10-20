@@ -124,6 +124,18 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 
 ![MVP Flow Demo](docs/demo/mvp-flow.gif)
 
+## For Developers（Memory API）
+- **Memory API**: ユーザーの好み・習慣・関係性を保存・検索・削除するAPI。
+- **Pluggable Memory**: Core（自前）と外部Provider（Supermemory/Zep/Mem0）を環境変数で切替可能。
+- **主な API**:
+  - `POST /api/memory/put` - Memory保存
+  - `POST /api/memory/query` - Memory検索
+  - `POST /api/memory/forget` - Memory削除
+  - `GET /api/memory/export` - 全Memoryエクスポート（データポータビリティ権）
+  - `DELETE /api/memory/purge` - 全Memory削除
+  - `GET /api/provider/status` - Provider状態確認
+- 詳細は **docs/MEMORY_API_USAGE.md** を参照。
+
 ## For Developers（Public API）
 - 開発者向けの**公開API/SDK/Webhook**を提供（β）。
 - 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/approve`で承認ID発行 → 4) `POST /v1/confirm`で一括実行 → 5) `minutes_back` と `friction_saved` を受領。
