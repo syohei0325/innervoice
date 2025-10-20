@@ -22,12 +22,25 @@ Res:
      {"action":"calendar.create","title":"朝ラン","start":"2025-09-19T07:00","duration_min":30},
      {"action":"message.send","to":"妻","text":"7時に走ってくるね"},
      {"action":"reminder.create","time":"2025-09-19T06:45","note":"ストレッチ"}
+  ],
+  "reasons":[
+     {"key":"morning_person","source":"core","confidence":0.84,"evidence":["memories.habit_window"]},
+     {"key":"<=15min_walk","source":"doc","provider":"supermemory","confidence":0.72,"evidence":["drive:doc_123"]}
   ]},
   {"id":"pl2","summary":"雨なら夜ストレッチ15分 + 連絡","actions":[
      {"action":"calendar.create","title":"夜ストレッチ","start":"2025-09-19T21:30","duration_min":15},
      {"action":"message.send","to":"妻","text":"夜にするね"}
+  ],
+  "reasons":[
+     {"key":"evening_window","source":"core","confidence":0.61,"evidence":["memories.routine"]}
   ]}
 ], "latency_ms": 950 }
+
+**注意**: `reasons`配列には、提案理由の出典情報が含まれます。
+- `source`: "core"（自前Memory OS）または "doc"（外部Provider）
+- `provider`: 外部Providerの場合、プロバイダ名（例: "supermemory", "zep", "mem0"）
+- `confidence`: 信頼度（0.0-1.0）
+- `evidence`: 証拠となるデータソース（例: "memories.habit_window", "drive:doc_123"）
 
 ## POST /api/confirm（MVP+拡張）
 Req: { "plan_id":"pl1", "enabled_actions":[0,1,2] }

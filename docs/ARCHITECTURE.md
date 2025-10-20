@@ -9,12 +9,18 @@
 - **.ics生成：サーバ（Node.js runtime）**
 - コネクタ：Calendar / Messenger / Reminders（最小2種類から開始）
 - **DB：Postgres（Neon/Supabase） + Prisma**（初期からPostgres固定）
+- **Memory Provider Layer**：`providers/supermemory|zep|mem0` を **env** と **A/B** で切替
 - E2E：Playwright
 - 計測：PostHog or GA4（軽量）
-- Public API Gateway（API Key / Rate Limiter / Versioning）
-- Webhooks Dispatcher（署名付与 / リトライ）
+- Public API Gateway（API Key / Rate Limiter / Versioning / **Idempotency**）
+- Webhooks Dispatcher（署名付与 / リトライ / アウトボックス）
 - MCPクライアント：OpenAI Realtime / Anthropic Claude から remote/local MCP に接続
-- MCPサーバ：innervoice-mcp（remote）／innervoice-mcp-local（端末内）— tools=calendar.create/message.send/reminder.create/...
+- MCPサーバ：yohaku-mcp（remote）／yohaku-mcp-local（端末内）— tools=calendar.create/message.send/reminder.create/call.place/places.search/reservations.book/parking.reserve/ride.order/pay.authorize/notify.push
+- SIP：Twilio/Telnyx Realtime（SIP/WebRTC）
+- OS深統合：iOS Shortcuts/App Intents、Android Intents、Windows Graph/Notifications
+- 通知アクション：Pushボタンで Confirm/Cancel（BG実行）
+- 連絡先リゾルバ：ローカル連絡先 + Graph API
+- **PDV**（端末優先）/ **Policy Engine**（最小共有/JIT権限/用途別トークン）
 
 ## データ流れ（MVP）
 入力(7秒音声/テキスト)

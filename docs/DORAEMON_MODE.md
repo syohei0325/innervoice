@@ -257,6 +257,85 @@ Response:
 }
 ```
 
+### Provider Control API
+
+#### GET /api/provider.status
+```json
+Response:
+{
+  "current": "supermemory",  // supermemory|zep|mem0|none
+  "healthy": true,
+  "latency_ms": 850,
+  "last_check": "2025-10-20T10:00:00Z"
+}
+```
+
+#### POST /api/provider.switch
+```json
+Request:
+{
+  "to": "zep"  // supermemory|zep|mem0|none
+}
+
+Response:
+{
+  "ok": true,
+  "previous": "supermemory",
+  "current": "zep"
+}
+```
+
+**注意**: このAPIは管理者専用です。A/B運用や緊急時のフォールバックに使用します。
+
+### Memory Export/Purge API
+
+#### GET /api/memory.export
+```json
+Response:
+{
+  "exported_at": "2025-10-20T10:00:00Z",
+  "total_count": 42,
+  "items": [
+    {
+      "kind": "preference",
+      "key": "coffee.sugar",
+      "value": 0,
+      "source": "utterance",
+      "confidence": 1.0,
+      "created_at": "2025-10-15T08:00:00Z"
+    },
+    {
+      "kind": "alias",
+      "key": "person.A",
+      "value": "部長",
+      "source": "manual",
+      "confidence": 0.8,
+      "created_at": "2025-10-16T09:00:00Z"
+    }
+    // ... 他のMemory
+  ]
+}
+```
+
+**用途**: ユーザーがすべてのCore Memoryをエクスポートできます。データポータビリティ権の実現。
+
+#### DELETE /api/memory.purge
+```json
+Request:
+{
+  "confirm": "PURGE_ALL_MEMORIES"  // 確認文字列（必須）
+}
+
+Response:
+{
+  "ok": true,
+  "deleted_count": 42,
+  "purged_at": "2025-10-20T10:05:00Z"
+}
+```
+
+**注意**: このAPIはCore Memory全削除を行います。UI側で確認ダイアログを必ず表示してください。
+
 ---
 
 ## 🎯 KPI
