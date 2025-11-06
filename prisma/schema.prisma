@@ -32,18 +32,171 @@ model User {
 }
 
 model Profile {
-  id              String  @id @default(cuid())
-  userId          String  @unique @map("user_id")
-  tz              String  @default("Asia/Tokyo")
-  displayName     String? @map("display_name")
-  commuteMinutes  Int?    @map("commute_minutes")
-  sleepWindow     String? @map("sleep_window")
-  ngHoursJson     String? @map("ng_hours_json")
-  mobilityPref    String? @map("mobility_pref")
+  id              String   @id @default(cuid())
+  userId          String   @unique @map("user_id")
+  tz              String   @default("Asia/Tokyo")
+  displayName     String?  @map("display_name")
+  commuteMinutes  Int?     @map("commute_minutes")
+  sleepWindow     String?  @map("sleep_window")
+  ngHoursJson     String?  @map("ng_hours_json")
+  mobilityPref    String?  @map("mobility_pref")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("profiles")
+}
+
+// PDV (Personal Data Vault) - 端末優先で同期
+model Pdv {
+  userId    String   @id @map("user_id")
+  kvJson    String   @map("kv_json") // JSON key-value store
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("pdv")
+}
+
+// Savings - Money-Back tracking
+model Saving {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  amountYen Int      @map("amount_yen")
+  category  String   // subscription_cancel|price_negotiation|coupon|cashback
+  source    String   // plan_id or action_id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("savings")
+}
+
+// Consents - Partner/用途別同意
+model Consent {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  scopeJson  String    @map("scope_json") // { "partner": "...", "scopes": ["location", "calendar"] }
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  @@index([userId, createdAt])
+  @@map("consents")
+}
+
+// Docs - 生成書類
+model Doc {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  type       String   // pdf|docx|ics|csv
+  storageUri String   @map("storage_uri")
+  hash       String   // SHA-256 for integrity
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("docs")
+}
+
+// Approvals - ConfirmOS
+model Approval {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  approveId  String   @unique @map("approve_id") // aprv_xxx
+  planId     String?  @map("plan_id")
+  scopeJson  String   @map("scope_json") // { "actions": [...], "risk_level": "low|medium|high" }
+  expiresAt  DateTime @map("expires_at") // 10分後
+  createdAt  DateTime @default(now()) @map("created_at")
+  usedAt     DateTime? @map("used_at")
+
+  @@index([approveId])
+  @@index([userId, createdAt])
+  @@map("approvals")
+}
+
+// Audit Logs - 監査
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  approveId   String?  @map("approve_id")
+  action      String   // approve|confirm|cancel|rollback
+  payloadJson String   @map("payload_json")
+  at          DateTime @default(now())
+
+  @@index([userId, at])
+  @@index([approveId])
+  @@map("audit_logs")
+}
+
+// Execution Ledger - 台帳
+model LedgerEvent {
+  id           String    @id @default(cuid())
+  approveId    String?   @map("approve_id")
+  planId       String?   @map("plan_id")
+  action       String    // calendar.create|message.send|call.place等
+  actor        String    // user|automation
+  status       String    // approved|executed|failed|rolled_back
+  beforeJson   String?   @map("before_json")
+  afterJson    String?   @map("after_json")
+  reversible   Boolean   @default(true)
+  rollbackId   String?   @map("rollback_id")
+  ts           DateTime  @default(now())
+
+  @@index([approveId, ts])
+  @@index([planId, ts])
+  @@map("ledger_events")
+}
+
+// Vibe Profiles - パーソナライゼーション
+model VibeProfile {
+  userId            String   @id @map("user_id")
+  tone              String   @default("friendly") // friendly|coach|concise|warm
+  decisiveness      String   @default("balanced") // quick|balanced|cautious
+  frugality         String   @default("mid") // low|mid|high
+  notificationStyle String   @default("push") // push|silent|scheduled
+  language          String   @default("ja-JP")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("vibe_profiles")
+}
+
+// Reason Feedbacks - Why-this フィードバック
+model ReasonFeedback {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  planId    String   @map("plan_id")
+  reasonKey String   @map("reason_key")
+  voteBool  Boolean  @map("vote_bool") // true=👍, false=👎
+  tag       String?  // too_expensive|too_far|too_crowded等
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("reason_feedbacks")
+}
+
+// Personalization Stats - 個人化統計
+model PersonalizationStat {
+  userId          String   @id @map("user_id")
+  date            DateTime @db.Date
+  top1Rate        Float?   @map("top1_rate")
+  editDistancePct Float?   @map("edit_distance_pct")
+  ttcP50Ms        Int?     @map("ttc_p50_ms")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, date])
+  @@map("personalization_stats")
+}
+
+// Friction Events - FEA集計用
+model FrictionEvent {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String   // copy_paste_avoided|app_switch_avoided|typing_avoided_chars|search_avoided|form_fill_avoided|call_tree_avoided
+  qty       Int      // 件数 or 文字数
+  evidence  String   // measured|inferred|baseline
+  action    String?  // 関連アクション
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("friction_events")
 }
 
 model Proposal {

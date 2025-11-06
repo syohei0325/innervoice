@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface InputBarProps {
   onInput: (text: string) => void;
@@ -10,6 +10,56 @@ interface InputBarProps {
 export default function InputBar({ onInput, isLoading }: InputBarProps) {
   const [text, setText] = useState('');
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Check if Web Speech API is supported
+    if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      setVoiceSupported(true);
+      
+      // Initialize speech recognition
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ja-JP';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setText(transcript);
+        setIsListening(false);
+        setIsVoiceMode(false);
+        
+        // Auto-submit after voice input
+        setTimeout(() => {
+          if (transcript.trim()) {
+            onInput(transcript.trim());
+            setText('');
+          }
+        }, 500);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        setIsVoiceMode(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, [onInput]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,8 +71,32 @@ export default function InputBar({ onInput, isLoading }: InputBarProps) {
   };
 
   const handleVoiceToggle = () => {
-    setIsVoiceMode(!isVoiceMode);
-    // TODO: Implement voice input (for now just toggle UI)
+    if (!voiceSupported) {
+      alert('お使いのブラウザは音声入力に対応していません。Chrome、Edge、Safariをお試しください。');
+      return;
+    }
+
+    if (isVoiceMode) {
+      // Stop listening
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsVoiceMode(false);
+      setIsListening(false);
+    } else {
+      // Start listening
+      setIsVoiceMode(true);
+      setIsListening(true);
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.error('Failed to start speech recognition:', error);
+          setIsVoiceMode(false);
+          setIsListening(false);
+        }
+      }
+    }
   };
 
   return (
@@ -53,7 +127,19 @@ export default function InputBar({ onInput, isLoading }: InputBarProps) {
           />
           {isVoiceMode && (
             <div className="absolute inset-0 bg-blue-50 bg-opacity-80 flex items-center justify-center rounded-lg">
-              <div className="text-blue-600 font-medium">🎤 音声入力モード（TODO: 実装）</div>
+              <div className="flex flex-col items-center gap-2">
+                <div className={`text-4xl ${isListening ? 'animate-pulse' : ''}`}>🎤</div>
+                <div className="text-blue-600 font-medium">
+                  {isListening ? '話してください...' : '音声入力準備中...'}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVoiceToggle}
+                  className="text-sm text-blue-500 underline"
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           )}
         </div>

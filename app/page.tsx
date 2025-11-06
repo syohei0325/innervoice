@@ -6,6 +6,8 @@ import ProposalList from './components/ProposalList';
 import MBMeter from './components/MBMeter';
 import ConfirmSheet from './components/ConfirmSheet';
 import Footer from './components/Footer';
+import ValueReceipt from './components/ValueReceipt';
+import LoadingSpinner from './components/LoadingSpinner';
 import { Plan } from '@/lib/intent';
 
 export type Proposal = {
@@ -21,6 +23,11 @@ export default function Home() {
   const [minutesBackToday, setMinutesBackToday] = useState(0);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  
+  // Value Receipt state
+  const [showValueReceipt, setShowValueReceipt] = useState(false);
+  const [lastMinutesBack, setLastMinutesBack] = useState(0);
+  const [lastFrictionSaved, setLastFrictionSaved] = useState<Array<{ type: string; qty: number; evidence: string }>>([]);
 
   const handleInput = async (text: string) => {
     setIsLoading(true);
@@ -38,16 +45,54 @@ export default function Home() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get proposals');
+      if (!response.ok) {
+        throw new Error('Failed to get proposals');
+      }
       
       const data = await response.json();
-      setProposals(data.proposals);
+      
+      if (data.proposals && data.proposals.length > 0) {
+        setProposals(data.proposals);
+      } else {
+        // Fallback proposals
+        setProposals([
+          {
+            id: 'fallback-1',
+            title: text.substring(0, 30),
+            slot: '09:00',
+            duration_min: 30,
+          },
+          {
+            id: 'fallback-2',
+            title: text.substring(0, 30),
+            slot: '14:00',
+            duration_min: 30,
+          },
+        ]);
+        alert('⚠️ AI提案の生成に失敗しました。フォールバック提案を表示しています。');
+      }
       
       // Track event: proposals_shown
       // TODO: Add telemetry
     } catch (error) {
       console.error('Error getting proposals:', error);
-      // TODO: Show fallback proposals
+      
+      // Show fallback proposals
+      setProposals([
+        {
+          id: 'fallback-1',
+          title: text.substring(0, 30),
+          slot: '09:00',
+          duration_min: 30,
+        },
+        {
+          id: 'fallback-2',
+          title: text.substring(0, 30),
+          slot: '14:00',
+          duration_min: 30,
+        },
+      ]);
+      alert('⚠️ 提案の取得に失敗しました。フォールバック提案を表示しています。\n\n環境変数（OPENAI_API_KEY）が正しく設定されているか確認してください。');
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +163,16 @@ export default function Home() {
       // Update minutes back
       if (data.minutes_back) {
         setMinutesBackToday(prev => prev + data.minutes_back);
+        setLastMinutesBack(data.minutes_back);
       }
+      
+      // Update FEA (Friction Events Avoided)
+      if (data.friction_saved) {
+        setLastFrictionSaved(data.friction_saved);
+      }
+      
+      // Show Value Receipt
+      setShowValueReceipt(true);
       
       // Reset proposals
       setProposals([]);
@@ -146,13 +200,22 @@ export default function Home() {
       
       const data = await response.json();
       
-      // Show results
-      if (data.execution_status === 'success') {
-        alert(`✅ ${enabledActions.length}件のアクションが成功しました！`);
-      } else if (data.ics_url) {
-        // Partial success - Calendar added, other connectors not yet implemented
-        alert(`✅ カレンダーに予定を追加しました！\n\n💡 今後のアップデートで、メッセージ送信やリマインダー作成も自動化されます。`);
-      } else {
+      // Update minutes back
+      if (data.minutes_back) {
+        setMinutesBackToday(prev => prev + data.minutes_back);
+        setLastMinutesBack(data.minutes_back);
+      }
+      
+      // Update FEA (Friction Events Avoided)
+      if (data.friction_saved) {
+        setLastFrictionSaved(data.friction_saved);
+      }
+      
+      // Show Value Receipt
+      setShowValueReceipt(true);
+      
+      // Show results (only for errors)
+      if (data.execution_status !== 'success' && !data.ics_url) {
         alert(`⚠️ 一部のアクションが失敗しました。詳細をご確認ください。`);
       }
       
@@ -197,13 +260,36 @@ export default function Home() {
     <main className="container mx-auto px-4 py-8 max-w-2xl">
       <div className="space-y-6">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">InnerVoice</h1>
-          <p className="text-gray-600">7秒で「決めて、置く」</p>
+          <div className="mb-4">
+            <span className="text-5xl">🗓️</span>
+          </div>
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">Yohaku</h1>
+          <p className="text-xl text-gray-700 mb-2">7秒で「決めて、置く」</p>
+          <p className="text-sm text-gray-500 max-w-md mx-auto">
+            AIがあなたの代わりに必要な電話を行い、その結果を予定・連絡・リマインドへ1タップで落とし込む
+          </p>
+          
+          {/* Feature badges */}
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+              🎤 音声入力
+            </span>
+            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+              ⚡ 1タップ確定
+            </span>
+            <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+              📅 .ics自動生成
+            </span>
+          </div>
         </div>
 
         <InputBar onInput={handleInput} isLoading={isLoading} />
         
-        {proposals.length > 0 && (
+        {isLoading && (
+          <LoadingSpinner text="AI が提案を生成中..." />
+        )}
+        
+        {!isLoading && proposals.length > 0 && (
           <ProposalList proposals={proposals} onConfirm={handleProposalClick} />
         )}
         
@@ -219,6 +305,14 @@ export default function Home() {
         <MBMeter minutesBack={minutesBackToday} />
       </div>
       <Footer />
+      
+      {/* Value Receipt - 軽量トースト */}
+      <ValueReceipt
+        minutesBack={lastMinutesBack}
+        frictionSaved={lastFrictionSaved}
+        show={showValueReceipt}
+        onClose={() => setShowValueReceipt(false)}
+      />
     </main>
   );
 }

@@ -1,6 +1,10 @@
 # Yohaku – 7秒で「決めて、置く」。スクリーンから人を解放する相棒
 > We don't optimize for screen‑time. We optimize for life‑time.
 
+### 一言要約（Call‑first）
+- AIがあなたの代わりに必要な**電話**を行い、その結果を**予定・連絡・リマインド**へ**1タップ（Confirm once）**で落とし込む。
+- **勝手に実行しない**：**通話の開始（Call Consent）**と**後続アクションの確定（Confirm once）**はあなたの承認が必要。
+
 ## 核心体験（MVP）
 - 入力：**7秒**（音声 or 無音テキスト）
 - 出力：**2つの提案**（所要時間ラベル付き）
@@ -175,3 +179,20 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 - 学習：**Taste Embedding**（好みベクトル）と**Partnerモード**（同意ベース共有）で"あなた/相手"に最適化。
 - 安全：**要約の強制表示/取消/ロールバック/監査**、金額は**二重承認**、車内は**読み上げ中心**。
 - 詳細：**docs/FUTURE_VISION.md** / **docs/TASTE_MODEL.md** / **docs/PARTNER_MODE.md** / **docs/CONFIRM_OS.md** / **docs/PACKS_OVERVIEW.md** を参照。
+
+## Yohaku → Action Cloud（最大EVへの道筋）
+
+**結論**：Yohakuの「通話→予定化」で**実運用データ（AXI/台帳）**を積み、その**規格（ConfirmOS）とAPI（/plan→/approve→/confirm）**を**Action Cloud**としてSLA付きで外販する。
+
+**3段階の道筋**
+1) **Phase 1 – Yohaku（0–9m）**：通話テンプレ（病院/飲食/再配達）→**AXIを週次公開**→**Execution Ledger**（席課金）  
+   **到達基準**：通話成功≥90% / 誤実行<0.5% / vMB中央値≥6分 / 有償≥30社
+2) **Phase 2 – Action Cloud β（9–18m）**：**/v1/plan → /v1/approve → /v1/confirm** を**SLA 99.5%**で外部に提供（中立・プロバイダ差し替え可）  
+   価格：**$0.03/アクション**＋**台帳$20/席**。**Call Provider Spec**（`call.place/status/summary`）準拠
+3) **Phase 3 – Action Cloud GA（18–36m）**：**Enterprise SLA 99.9%**（リージョン固定、監査証跡/EU DPA）＋**ConfirmOS v1**公開仕様＋**AXIリーダーボード**
+
+**ポジショニング**
+- 入口（会話UI/検索/モデル）を持つ大手に対し、Yohaku/Action Cloudは**出口＝結果確定の標準**（**実行のUSB‑C**）を握る。  
+- **Open‑box（AXI/台帳公開）**・**規制整合（Call Consent/監査）**・**プロバイダ中立**をコア原則として維持。
+
+詳細は **docs/ACTION_CLOUD.md** / **docs/ROADMAP_36M.md** / **docs/EVALS.md** を参照。

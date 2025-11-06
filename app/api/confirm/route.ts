@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[CONFIRM] Body received:', JSON.stringify(body));
     
-    const { proposal_id, plan_id, enabled_actions } = body;
+    const { proposal_id, plan_id, enabled_actions, approve_id, idempotency_key } = body;
     
     if (!proposal_id && !plan_id) {
       return NextResponse.json(
@@ -33,6 +33,62 @@ export async function POST(request: NextRequest) {
 
     const mockUserId = 'user_mock_001';
     const eventId = uuidv4();
+
+    // ConfirmOS: approve_id validation (optional for MVP, required for MVP+)
+    if (approve_id) {
+      const approval = await prisma.approval.findUnique({
+        where: { approveId: approve_id },
+      });
+
+      if (!approval) {
+        return NextResponse.json(
+          { error: '400_APPROVAL_NOT_FOUND', message: 'Approval not found' },
+          { status: 400 }
+        );
+      }
+
+      const now = new Date();
+      if (now > approval.expiresAt) {
+        return NextResponse.json(
+          { error: '400_APPROVAL_EXPIRED', message: 'Approval has expired' },
+          { status: 400 }
+        );
+      }
+
+      if (approval.usedAt) {
+        return NextResponse.json(
+          { error: '409_APPROVAL_ALREADY_USED', message: 'Approval already used' },
+          { status: 409 }
+        );
+      }
+
+      // Mark approval as used
+      await prisma.approval.update({
+        where: { approveId: approve_id },
+        data: { usedAt: now },
+      });
+    }
+
+    // ConfirmOS: Idempotency check (optional for MVP, recommended for production)
+    if (idempotency_key) {
+      // Check if this idempotency key was already processed
+      const existingLog = await prisma.auditLog.findFirst({
+        where: {
+          userId: mockUserId,
+          action: 'confirm',
+          payloadJson: {
+            contains: idempotency_key,
+          },
+        },
+      });
+
+      if (existingLog) {
+        return NextResponse.json(
+          { error: '409_IDEMPOTENCY_CONFLICT', message: 'Request already processed' },
+          { status: 409 }
+        );
+      }
+    }
     
     // 提案情報を取得（リクエストに含まれているか、ストアから取得）
     let proposal: Proposal | null = null;
@@ -84,6 +140,50 @@ export async function POST(request: NextRequest) {
           createdAt: new Date(),
         },
       });
+
+      // ConfirmOS: Audit log
+      await prisma.auditLog.create({
+        data: {
+          userId: mockUserId,
+          approveId: approve_id || null,
+          action: 'confirm',
+          payloadJson: JSON.stringify({
+            proposal_id,
+            plan_id,
+            idempotency_key,
+            event_id: eventId,
+          }),
+        },
+      });
+
+      // ConfirmOS: Ledger event
+      await prisma.ledgerEvent.create({
+        data: {
+          approveId: approve_id || null,
+          planId: plan_id || null,
+          action: 'calendar.create',
+          actor: 'user',
+          status: 'executed',
+          beforeJson: null,
+          afterJson: JSON.stringify({
+            event_id: eventId,
+            title: proposal?.title,
+            start_time: proposal?.slot,
+          }),
+          reversible: true,
+        },
+      });
+
+      // Record FEA (Friction Events Avoided)
+      await prisma.frictionEvent.create({
+        data: {
+          userId: mockUserId,
+          type: 'app_switch_avoided',
+          qty: 1,
+          evidence: 'measured',
+          action: eventId,
+        },
+      });
       
       console.log('[CONFIRM] Database save successful');
     } catch (dbError) {
@@ -97,6 +197,13 @@ export async function POST(request: NextRequest) {
       minutes_back: proposal?.duration_min || 15,
       execution_status: 'success',
       event_id: eventId,
+      // ConfirmOS fields
+      approve_id: approve_id || null,
+      idempotency_key: idempotency_key || null,
+      // FEA (Friction Events Avoided)
+      friction_saved: [
+        { type: 'app_switch_avoided', qty: 1, evidence: 'measured' },
+      ],
     };
     
     console.log('[CONFIRM] Response ready');
