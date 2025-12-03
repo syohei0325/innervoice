@@ -140,6 +140,22 @@ TELEMETRY_WRITE_KEY=your-posthog-key
   - `GET /api/provider/status` - Provider状態確認
 - 詳細は **docs/MEMORY_API_USAGE.md** を参照。
 
+## For Developers（DSPL & ConfirmOS）
+- **DSPL (Display-Specific Language)**: LLMが生成するConfirm Sheetの構成スキーマ。NLUI×GUIの連続体を実現。
+- **Irreversibility Gate**: 支払い/本人確認/規約変更などの不可逆操作を検出し、二重承認とWarm Transferを要求。
+- **Model Routing Layer**: データ分類（P0/P1/P2）とリージョンに基づいた中立的なモデル選択。
+- **Supply-Chain Trust Panel**: 実行ごとにどのベンダに何を渡したかを可視化。
+- 詳細は **docs/DSPL_SPEC.md** / **docs/MODEL_ROUTING_GUIDE.md** / **docs/SUPPLY_CHAIN_TRUST.md** を参照。
+
+## For Developers（AXI & Security KPI）
+- **AXI (Action eXecution Index)**: 実行品質指標を週次で公開（TTC/誤実行/取消成功/ロールバック成功/通話成功/Screen-off完了）。
+- **Security KPI**: セキュリティ指標を週次で公開（脆弱性/依存関係遅延/シークレット漏洩/MTTR/SBOM/サブプロセッサー通知遅延/Referrer遮断率）。
+- **主な API**:
+  - `GET /api/axi` - AXI取得
+  - `GET /api/security-kpi` - Security KPI取得
+  - `GET /api/supply-chain` - Supply-Chain Trust Panel
+- 詳細は **docs/EVALS.md** を参照。
+
 ## For Developers（Public API）
 - 開発者向けの**公開API/SDK/Webhook**を提供（β）。
 - 使い方：1) APIキー発行 → 2) `POST /v1/plan`でPlanを取得 → 3) `POST /v1/approve`で承認ID発行 → 4) `POST /v1/confirm`で一括実行 → 5) `minutes_back` と `friction_saved` を受領。

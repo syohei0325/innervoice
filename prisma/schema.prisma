@@ -126,7 +126,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// Execution Ledger - 台帳
+// Execution Ledger - 台帳（改ざん検知対応）
 model LedgerEvent {
   id           String    @id @default(cuid())
   approveId    String?   @map("approve_id")
@@ -139,6 +139,7 @@ model LedgerEvent {
   reversible   Boolean   @default(true)
   rollbackId   String?   @map("rollback_id")
   ts           DateTime  @default(now())
+  prevHash     String?   @map("prev_hash") // 改ざん検知用ハッシュチェーン
 
   @@index([approveId, ts])
   @@index([planId, ts])

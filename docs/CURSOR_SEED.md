@@ -12,6 +12,7 @@
 ### 一言要約（Call‑first）
 - AIがあなたの代わりに必要な**電話**を行い、その結果を**予定・連絡・リマインド**へ**1タップ（Confirm once）**で落とし込む。
 - **勝手に実行しない**：**通話の開始（Call Consent）**と**後続アクションの確定（Confirm once）**はあなたの承認が必要。
+- **NLUI×GUIの連続体**：LLMが生成する**DSPL**（Display‑Specific Language）で**Confirm Sheet**を構成。**7秒→2提案→1確定**を**1画面**で完結。
 
 ## 核心体験（MVP）
 - 入力：**7秒**（音声 or 無音テキスト）
@@ -52,6 +53,7 @@
 - **Personalization‑first**：Vibe / Taste / Why‑this‑for‑you（**出典明示**）
 - **Open‑box**：SLA/SLO・Execution Ledger・Idempotency・.icsフォールバックを**常時公開**（黒箱にしない）
 - **ConfirmOS**：要約表示・二重承認（支払い/通話）・取消猶予10秒・監査ログ・ロールバック
+- **NLUI×GUI（DSPL）**：対話の文脈から**Confirm Sheet**を動的生成し**1画面完結**を守る
 
 ## 北極星（PMF検証KPI）
 - Median **vMB ≥ 15分/日**（D30継続ユーザー｜保守的推定）
@@ -81,10 +83,6 @@
 **ポジショニング**
 - 入口（会話UI/検索/モデル）を持つ大手に対し、Yohaku/Action Cloudは**出口＝結果確定の標準**（**実行のUSB‑C**）を握る。  
 - **Open‑box（AXI/台帳公開）**・**規制整合（Call Consent/監査）**・**プロバイダ中立**をコア原則として維持。
-
-## For ChatGPT Apps（Yohaku Lite）
-- ChatGPT内で動く**超軽量版**（7→2→1、Cal+Email、Why‑this、ConfirmOS、.icsフォールバック）
-
 # ───────────────
 # END: README.md
 # ───────────────
@@ -110,6 +108,7 @@
 10. 車内は**読み上げ中心**・操作最小（Carガイドライン準拠）
 11. **Ask→Anticipate**：人が言う前に“そっと提案”。**ナッジは最小で、騒がない。**
 12. **Pluggable Memory**：**出典明示**・**乗換自由**・**主権尊重**を守る。
+13. **NLUI×GUI（DSPL）**：対話の文脈でConfirm Sheetをレンダリング、**7→2→1**を崩さない。
 
 ## 将来像
 - **声で完了する横断OS**：地図/予約/駐車/移動/連絡/決済を Plan→Confirm once で連鎖実行（APIが無い先は通話）。
@@ -118,7 +117,6 @@
 
 ## KPI（保守的表示）
 - Top‑1採択率≥55% / 編集距離中央値≤20% / Time‑to‑Confirm p50≤3秒 / Screen‑off≥70% / vMB & FEA並行計測
-
 # ────────────────────
 # END: docs/VISION.md
 # ────────────────────
@@ -141,7 +139,6 @@
 - Value Receipt：軽量トースト（FEA件数主）＋時間は小さく保守的
 - vMB/FEAを記録（UI常時表示はしない）
 - PIIは保存しない（要約+操作メタのみ）
-
 # ─────────────────────
 # END: docs/PRD_MVP.md
 # ─────────────────────
@@ -159,7 +156,6 @@
 - **.icsフォールバック**常時有効
 - 提案表示 **p50 ≤ 1.5s**、実行はBGで継続し結果通知
 - **Why‑this‑for‑you**（最大3理由・**出典明示**）と**理由フィードバック**（👍/👎+タグ）
-
 # ─────────────────────
 # END: docs/PRD_MVP_PLUS.md
 # ─────────────────────
@@ -175,6 +171,28 @@
 - **Undo 10秒** / **ロールバック** / **監査ログ**
 - **金額/通話は二重承認** / `/confirm` は **idempotency-key 必須**
 
+### DSPL – Display‑Specific Language（Confirm Sheetの構成をLLMが生成）
+- 目的：NLUI（対話）とGUI（Confirm Sheet）の“連続体”を実現する。
+- 形：LLMは `confirm_sheet` スキーマに沿った**DSPL JSON**を返す。Viewerは**1画面**にレンダリング。
+- サンプル：
+```json
+{
+  "confirm_sheet": {
+    "title": "◯◯クリニック 10:30 予約",
+    "badges": ["費用¥0", "本人確認不要", "駐車場×"],
+    "sections": [
+      {"type":"summary","text":"明日10:30で予約確定候補。家族へ共有+出発9:45リマインド。"},
+      {"type":"risks","items":[{"label":"誤認リスク低","level":"low"}]},
+      {"type":"alternatives","items":[{"label":"10:45","action":"replan(10:45)"}]}
+    ]
+  }
+}
+```
+
+### Irreversibility Gate（不可逆ゲート）
+- **支払い** / **本人確認** / **規約変更** / **キャンセル不可の操作** は、**二重承認＋Warm Transfer（人間へ引き継ぎ）**を**必須**。
+- Gate命中時は**Autopilot無効**・**録音ON案内**（同意時のみ）・**可逆性フラグ=false**を台帳に記録。
+
 ### KPI
 - 誤実行率 < 0.5% / 取消成功率 / ロールバック成功率 / 平均承認時間
 
@@ -185,15 +203,13 @@
 - `approve_id` が無い通話リクエストは **400_CALL_CONSENT_REQUIRED** を返す。
 
 ### Execution Ledger（台帳）
-
 - **目的**：承認→実行→取消/ロールバックの**完全監査**。eDiscovery/不正調査/SLO検証に使用。  
 - **イベントスキーマ（例）**:
 ```json
-{ "id":"ledg_{{uuid}}", "approve_id":"aprv_abc123", "plan_id":"pl1", "action":"calendar.create", "actor":"user|automation", "status":"approved|executed|failed|rolled_back", "before":null, "after":{"id":"evt_123","start":"..."}, "reversible":true, "rollback_id":null, "ts":"2025-10-19T10:10:02Z" }
+{ "id":"ledg_{{uuid}}", "approve_id":"aprv_abc123", "plan_id":"pl1", "action":"calendar.create", "actor":"user|automation", "status":"approved|executed|failed|rolled_back", "before":null, "after":{"id":"evt_123","start":"..."}, "reversible":true, "rollback_id":null, "ts":"2025-10-19T10:10:02Z", "prev_hash":"<hex>" }
 ```
 - **保持**：90日（既定）。エクスポートAPIと削除リクエストに準拠。  
 - **KPI**：取消成功率 / ロールバック成功率 / 平均承認時間 / 誤実行率。
-
 # ─────────────────────────
 # END: docs/CONFIRM_OS.md
 # ─────────────────────────
@@ -208,8 +224,16 @@
 - 音声→テキスト: Whisper（将来ローカル）
 - **Intentバス**：Intent(JSON)→Plan→Connector/MCP（並列）
 - **.ics生成**：サーバ（Node.js runtime）
-- DB: Postgres(+Prisma) / E2E: Playwright / 計測: PostHog or GA4
+- DB: Postgres(+Prisma) / E2E: Playwright / 計測: OpenTelemetry（server-side collector。client-side analytics JSは不使用） / （任意）Self-hosted PostHog
 - Public API GW（API Key / Rate / Version / **Idempotency**）
+
+### Default HTTP Headers（supply-chain漏えい対策）
+- `Referrer-Policy: no-referrer`
+- `Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.yohaku.app; frame-ancestors 'none'`
+- `Permissions-Policy: geolocation=(), microphone=(), camera=()`
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Resource-Policy: same-origin`
+
 - **Idempotency TTL 24h** / 衝突は `409` を返却（**exactly‑once**はアウトボックス＋再実行ガードで担保）
 - **Outbox**（署名付きWebhooks・再送）＋**Inbox**（重複除外）で**少なくとも一度**→**実質一度**を実現
 - **部分成功**：失敗分は自動リトライ、限界超過で再提案
@@ -223,12 +247,20 @@
 - **PDV**（端末優先）/ **Policy Engine**（最小共有/JIT権限/用途別トークン）
 - **Memory Provider Layer**：`providers/supermemory|zep|mem0` を **env** と **A/B** で切替
 
+### Model Routing Layer（コスト/遅延/規制の中立ルーティング）
+- **データ分類**：`P0=PII/決済/録音実体`、`P1=予約要約/個人名含まず`、`P2=一般推論`  
+- **方針**：  
+  - **P0** → **US/JP/EUの信頼プロバイダ固定**（OpenAI/Anthropic等）、**中国系/未審査は不可**  
+  - **P1** → **匿名化後**に**価格/遅延で選択**（Kimi系/ローカル含む）  
+  - **P2** → **最安/最速ルート**優先（地域ゲート順守）  
+- **リージョンゲート**：EUは越境既定OFF（同意でON）。JPは中国系は**P2のみopt‑in**。  
+- **計測**：`provider_events` に **命中率/遅延/コスト**を記録し、AXI週次にサマリ公開。
+
 ### レイテンシSLO（提案表示）
 ASR ≤ 250ms / 意図→2案 ≤ 700ms / UI描画 ≤ 300ms → **合計 p50 ≤ 1.5s**
 
 ### データ流れ（要点）
 7秒入力 → `/api/propose` → 2案 → `/api/plan` → **ConfirmOS** → `/api/confirm`（並列実行 + **.icsフォールバック**）→ 結果通知 / vMB/FEA / 監査ログ
-
 # ─────────────────────────
 # END: docs/ARCHITECTURE.md
 # ─────────────────────────
@@ -251,12 +283,13 @@ ASR ≤ 250ms / 意図→2案 ≤ 700ms / UI描画 ≤ 300ms → **合計 p50 �
 - **docs(id, user_id, type, storage_uri, hash, created_at)**             # 生成書類
 - **approvals(id, user_id, approve_id, plan_id, scope_json, created_at)**# ConfirmOS
 - **audit_logs(id, user_id, approve_id, action, payload_json, at)**      # 監査
-- **ledger_events(id, approve_id, plan_id, action, actor, status, before_json, after_json, reversible, rollback_id, ts)**  # Execution Ledger
+- **ledger_events(id, approve_id, plan_id, action, actor, status, before_json, after_json, reversible, rollback_id, ts, prev_hash)**  # Tamper-evident Execution Ledger
 - deletion_requests(id, user_id, status, requested_at)
 - **vibe_profiles(user_id, tone, decisiveness, frugality, notification_style, language, updated_at)**
 - **reason_feedbacks(id, user_id, plan_id, reason_key, vote_bool, tag, created_at)**
 - **personalization_stats(user_id, date, top1_rate, edit_distance_pct, ttc_p50_ms, created_at)**
 - **friction_events(id, user_id, type, qty, evidence, action, created_at)** # FEA集計用
+- **provider_events(user_id, provider, event, payload_json, at)**        # Model/Memory/Call Provider状態
 
 ## Doraemon拡張（新規）
 - **memories**(id, user_id, kind, key, value_json, source, confidence, expires_at, created_at, updated_at)
@@ -266,7 +299,6 @@ ASR ≤ 250ms / 意図→2案 ≤ 700ms / UI描画 ≤ 300ms → **合計 p50 �
   status: `shown|accepted|dismissed|snoozed|expired`
 - **contact_graph**(user_id, contact_id, tie_strength, last_met_at, last_msg_at, cadence_days, channels_json, updated_at)
 - **availability**(user_id, date, slots_json, source, updated_at)
-- **provider_events**(user_id, provider, event, payload_json, at)        # Memory Provider状態
 
 ## インデックス
 memories(user_id,key) / nudges(user_id,created_at) / contact_graph(user_id,updated_at) / decisions(user_id,decided_at) / approvals(approve_id) / audit_logs(user_id,at) / ledger_events(approve_id, ts)
@@ -276,7 +308,6 @@ memories(user_id,key) / nudges(user_id,created_at) / contact_graph(user_id,updat
 EvidenceFactor：1.0=実測, 0.6=類推, 0.3=初期テーブル  
 FEA: `copy_paste_avoided` / `app_switch_avoided` / `typing_avoided_chars` / `search_avoided` / `form_fill_avoided` / `call_tree_avoided`  
 **UIは件数が主役**、時間は小さく保守的に添える
-
 # ──────────────────────
 # END: docs/DATA_MODEL.md
 # ──────────────────────
@@ -421,6 +452,10 @@ Body:
 { "request_id":"cp_{{uuid}}", "summary":"◯◯クリニックに明日10:30で予約確定。受付:田中様。", "transcript_uri":null, "entities":{ "result":"confirmed|rescheduled|canceled|unknown", "date":"2025-10-19", "time":"10:30", "place":"◯◯クリニック" }, "duration_sec": 178, "locale":"ja-JP" }
 ```
 
+#### 発信者番号と冒頭明示（JP推奨）
+- **非通知を避ける**：正規の 0ABJ/050 を用い、**再発信時は同一番号**・**ルート固定**。
+- **冒頭に明示**：発話冒頭で「**ユーザー本人の依頼による予約連絡です**」を自動挿入（詐欺/迷惑電話の誤認回避）。
+
 #### 冪等と再送
 - すべてのWebhookは `X-Idempotency-Key` を付与。受領側は **24h** の重複除外を実装。  
 - 失敗時は指数バックオフでリトライ（最大24h）。
@@ -429,7 +464,6 @@ Body:
 - `call.status` 初回通知：発信から**≤5s**  
 - `call.summary` 終話から**≤10s**  
 - 可用性 **99.5%+**（暦月）、署名検証エラーは**400**で即時失敗扱い。
-
 # ─────────────────────────
 # END: docs/API_CONTRACTS.md
 # ─────────────────────────
@@ -461,7 +495,6 @@ source: `utterance|action|calendar|message_meta|import|manual`
 
 ### KPI
 命中率 / 誤記憶率 / 手動修正率
-
 # ─────────────────────────
 # END: docs/MEMORY_OS.md
 # ─────────────────────────
@@ -493,7 +526,6 @@ export interface MemoryProvider {
 
 ## フォールバック
 - 外部が落ちたら**Coreのみ**で推論（.icsフォールバックは常時有効）
-
 # ─────────────────────────
 # END: docs/MEMORY_PROVIDERS.md
 # ─────────────────────────
@@ -519,7 +551,6 @@ Nudge表示 p50≤300ms / Confirm once / Undo10秒 / 監査 / 部分成功OK / .
 
 ### KPI
 採択≥25% / 誤提案≤10% / 苦情≤0.5% / Screen‑off / TTC / Top‑1 / vMB/FEAリフト
-
 # ─────────────────────────
 # END: docs/PROACTIVE_OS.md
 # ─────────────────────────
@@ -546,7 +577,6 @@ B: 次週に回す + 軽い一言
 
 ### セーフティ
 メタのみ（本文解析は明示同意）/ Partnerモード（最小・期限付き）
-
 # ─────────────────────────
 # END: docs/RELATIONSHIP_GRAPH.md
 # ─────────────────────────
@@ -569,6 +599,10 @@ Nudgeは**2件まで**・**Undo 10秒**・**礼節モード**・**クールダ�
 実行は Plan→Confirm→MCP/ネイティブ、**.icsフォールバック**常備  
 **プロバイダ分離**：Google系→Googleマップ／Apple系→Appleマップ
 
+### Browser Extension（Confirm Bar α）
+- Webフォームの送信/予約/購入直前に**ConfirmOSの小シート**を表示（差分/影響/Undo10秒）。
+- **Sensitive‑site Pause**：銀行/官公庁/大手ECでは常時Pause→人間確認（Warm Transfer + 二重承認）。
+- 目的：入口がどこでも**“確定体験”を統一**し、事故率を下げる。
 # ─────────────────────────
 # END: docs/OS_INTEGRATIONS.md
 # ─────────────────────────
@@ -587,6 +621,7 @@ Nudgeは**2件まで**・**Undo 10秒**・**礼節モード**・**クールダ�
 - **Call Consent 必須**：通話開始前に **/api/approve** で承認を取得（**approve_id** / TTL 10分）。承認なしの通話は送出しない。
 - **Warm Transfer（人間オペレーターへ引き継ぎ）**：高リスク（支払い/本人確認/規約変更）時は **transfer.requested → transfer.connected → transfer.canceled** の状態遷移をサポート。ConfirmOSの**二重承認**を必須化。
 - **リージョン別同意**：録音・要約の扱いは **REGULATORY** に従い、JP/US/EU でアナウンス文言を切替（録音既定OFF、要約のみ長期）。
+- **発信者番号（JP）**：**非通知回避**・**同一番号**・**冒頭で“ユーザー依頼の連絡”明示**。
 
 ### フロー（Outbound）
 1) ユーザー意図 → **Call Consent**（承認）  
@@ -595,7 +630,6 @@ Nudgeは**2件まで**・**Undo 10秒**・**礼節モード**・**クールダ�
 4) **Undo 10秒** / 監査台帳（Execution Ledger）へ記録
 
 KPI: 通話成功≥90% / Screen‑off≥70% / 提案表示p50≤1.5s / vMB中央値≥6分/実行
-
 # ─────────────────────────
 # END: docs/PRD_CALL_OS.md
 # ─────────────────────────
@@ -614,8 +648,8 @@ KPI: 通話成功≥90% / Screen‑off≥70% / 提案表示p50≤1.5s / vMB中�
 7) **リージョンゲート**：EUは後追い・データ最小化厳守
 8) **AXIダッシュボード共有**：yohaku.app/axi を共有して品質を“数字で”伝播
 9) **ステータスページ**：status.yohaku.app を掲示（稼働/障害/SLA進捗）
-10) **Action Cloud Early Access**：`yohaku.app/action-cloud` でβ申請（SLA/料金/AXIを明記）
-
+10) **Action Cloud Early Access**：`yohaku.app/action-cloud` でβ申請（SLA/料金/AXI/セキュリティKPIを明記）
+11) **Creator Kit（配布をプロダクトに同梱）**：①1タップConfirmリンク（.icsフォールバック付）②vMB/FEAの週次カード（画像/縦クリップ自動生成）③紹介リファラ（クリック→有効化→初回確定を可視化）
 # ─────────────────────────
 # END: docs/DISTRIBUTION_PLAYBOOK.md
 # ─────────────────────────
@@ -628,7 +662,6 @@ KPI: 通話成功≥90% / Screen‑off≥70% / 提案表示p50≤1.5s / vMB中�
 
 **Money**（交渉/解約/乗換：¥Bを可視化） / **Civic**（書類生成＋枠取り） / **Family** / **Care**  
 共通：ConfirmOS／KPI＝完了率/vMB/¥B/誤実行/Screen‑off
-
 # ─────────────────────────
 # END: docs/PACKS_OVERVIEW.md
 # ─────────────────────────
@@ -643,7 +676,6 @@ Now–6m：Cal/Message/Reminders/通話テンプレ & Car KPI本番
 12–36m：`pay.authorize`・事業者連携・テンプレ市場拡大・協調エージェント
 
 KPI：vMB≥15分/日 / Screen‑off≥70% / Confirm中央値≥2.2 / 提案表示p50≤1.5s / 通話成功≥90% / 誤実行<0.5% / Taste命中≥40%
-
 # ─────────────────────────
 # END: docs/FUTURE_VISION.md
 # ─────────────────────────
@@ -656,7 +688,6 @@ KPI：vMB≥15分/日 / Screen‑off≥70% / Confirm中央値≥2.2 / 提案表�
 学習：承認/却下/再訪/滞在時間/即時反応（弱教師）  
 推論：端末先行→サーバ再ランク（要約＋統計のみ）  
 UI：却下時に理由タグ（高い/遠い/混雑/暗い/駐車×…）を1タップ収集
-
 # ─────────────────────────
 # END: docs/TASTE_MODEL.md
 # ─────────────────────────
@@ -669,7 +700,6 @@ Vibe Profile（tone/decisiveness/frugality/notification_style/language）
 Why‑this‑for‑you（最大3理由＋👍/👎+タグ＋**出典**）  
 Pulse（受動2案、朝/寝る前のみ、No‑Feed、静音時間厳守）  
 KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
-
 # ─────────────────────────
 # END: docs/PERSONALIZATION.md
 # ─────────────────────────
@@ -681,7 +711,6 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 同意が核。共有は最小・期限付き・撤回自由  
 共有例：NG食材/価格帯/雰囲気/移動手段/当日位置（必要最小）  
 監査：誰が何を共有/利用したかを90日保持（削除/エクスポート可）
-
 # ─────────────────────────
 # END: docs/PARTNER_MODE.md
 # ─────────────────────────
@@ -703,10 +732,27 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - decisions/approvals：1y（ユーザー削除で即時消去）
 - memories：TTLマトリクスに従う
 
+## Third-Party & Telemetry
+- Client-side analytics JSは**使用しない**。計測は**OpenTelemetry（server-side collector）**経由のみ。
+- 分析系への識別子は**不可逆化**（HMAC-SHA256 + tenant salt）。メールやOrgIDの**平文は送信禁止**。
+- 既定ヘッダで**Referrerを遮断**（`Referrer-Policy: no-referrer`）。CSP/Permissions/CORP/COOP を強制。
+
+## Data Classification & Region Gate（Modelにも適用）
+- Data Class：**P0=PII/決済/録音実体**, **P1=要約/準特定**, **P2=一般**  
+- 送信方針：**P0は中国系/未審査エンドポイントへ送信禁止**（Org Policyで強制）。**P1/P2は匿名化後にコスト最適ルートを許可**。  
+- リージョン：**US/JP/EU**でポリシー差分を適用。**EU越境は既定OFF**（同意時のみON）。**JPは中国系はP2のみopt‑in**。
+
+## Subprocessors（委託先）
+- 一覧を `status.yohaku.app/subprocessors` に**常時掲示**（名称/用途/保管地域/データ種別）。
+- 契約（DPA）に**72h以内のインシデント通知**・**再委託制限**・**地域固定**を明記。
+
+## Supply-Chain Trust Panel
+- Confirm/実行ごとに**どのベンダに何を渡したか**（目的・期間・地域・署名の有無）を**台帳のUI**で可視化。
+- 署名エラー/越境は**赤帯警告**としてユーザーに提示。エクスポートAPIで外部監査に供する。
+
 ## 透明性
 - Why‑thisに**出典と信頼度**を表示
 - エクスポート/削除API（memory.export / memory.purge）を提供
-
 # ─────────────────────────
 # END: docs/SECURITY_PRIVACY.md
 # ─────────────────────────
@@ -722,6 +768,9 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - **録音同意の案内文言（例）**：JP「通話内容を要約のために一時的に記録します。よろしいですか？」／US「This call may be recorded and summarized for quality purposes. Do you consent?」／EUはデータ最小化・目的限定・保存期間明示。
 - **データ移転**：外部プロバイダに預けるデータは**最小化**し、出典のみCoreに保持。
 
+### JP固有の補足
+- **特定商取引法（電話勧誘販売）**は**事業者→消費者の勧誘**が対象。Yohakuは**消費者起点の発信支援**であり**勧誘ではない**設計。  
+- **迷惑/詐欺ロボコール対策**として、**非通知回避**・**同一番号**・**冒頭に「ユーザー依頼の連絡」明示**を仕様化（CALL PROVIDER SPEC参照）。
 # ─────────────────────────
 # END: docs/REGULATORY.md
 # ─────────────────────────
@@ -741,21 +790,34 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - **通話成功率（%）**
 - **Screen‑off完了率（%）**（Carモード含む）
 
+### Frontier KPI（未知の“電話しかない島”を攻める）
+- **Frontier Ratio**：**電話/非APIの先での確定件数 / 全確定件数**  
+- **New‑Domain Velocity**：**新テンプレ本番投入数/週**  
+- **Unreachable Win**：**営業時間外/長保留の突破確定割合**
+
+### Security KPI（外部公開・週次）
+- `vuln_open` / `deps_outdated_avg_days` / `secrets_incidents_7d` / `mttr_security_hours` / `sbom_coverage_pct`
+- `subproc_notification_lag_hours` / `referrer_block_rate_pct`
+
 ### 公開ポリシー
 - 集計は**7日移動平均**、個人特定情報は含めない。
-- AXIは **status.yohaku.app/axi** に掲示（将来URL想定）。
+- AXIは **status.yohaku.app/axi** に掲示（将来URL想定）。Security KPIも同ページで公開。
 - 指標の定義と計測式はドキュメントで常時公開。
 
-### JSONサンプル
+### JSONサンプル（AXI）
 ```json
 { "week":"2025-W45", "ttc_p50_ms":680, "misexec_pct":0.32, "cancel_success_pct":97.8, "rollback_success_pct":96.4, "call_success_pct":91.2, "screen_off_completion_pct":72.1 }
+```
+
+### JSONサンプル（Security KPI）
+```json
+{ "week":"2025-W45", "vuln_open":1, "deps_outdated_avg_days":12, "secrets_incidents_7d":0, "mttr_security_hours":18, "sbom_coverage_pct":96, "subproc_notification_lag_hours":12, "referrer_block_rate_pct":100 }
 ```
 
 ## 内部EVALS（自動）
 - **Top‑1採択率** / **編集距離** / **Time‑to‑Confirm** / **Nudge採択/誤提案** / **vMB/FEA**
 - 失敗例の**理由タグ**を収集→Taste/Memory閾値に反映
 - Provider A/B：採択率/レイテンシ/誤提案で比較、週次で切替判断
-
 # ─────────────────────────
 # END: docs/EVALS.md
 # ─────────────────────────
@@ -766,13 +828,13 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 # ─────────────────────────
 ## 0–6m
 - **Yohaku Wedge**：通話→予定化テンプレ（病院/飲食/再配達）を本番運用
-- **AXI外部公開**：週次で `ttc_p50 / misexec / cancel / rollback / call_success / screen_off` を掲示
+- **AXI & Security KPI 外部公開**：週次で `ttc_p50 / misexec / cancel / rollback / call_success / screen_off` と `vuln_open / mttr_security_hours ...` を掲示
 - Execution Ledger v0（席課金の設計）、Provider PoC（Twilio/Telnyxのどちらか1社）
 
 ## 6–12m
 - **Action Cloud β（招待制）**：`/v1/plan → /v1/approve → /v1/confirm` を **SLA 99.5%** で外販（中立）
-- **ConfirmOS強化**：Warm Transfer / 二重承認 / Undo10秒 / 可逆性フラグの本番運用
-- Provider二社冗長（自動降格/ヘルスチェック/A/B）
+- **ConfirmOS強化**：Warm Transfer / 二重承認 / Undo10秒 / **Irreversibility Gate** 本番運用
+- Provider二社冗長（自動降格/ヘルスチェック/A/B）／**Model Routing Layer**のP0/P1/P2運用
 
 ## 12–24m
 - **Action Cloud GA（Enterprise）**：**SLA 99.9%**、リージョン固定、監査証跡API、EU DPA対応
@@ -802,7 +864,6 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
   ]
 }
 ```
-
 # ─────────────────────────
 # END: docs/MCP_OVERVIEW.md
 # ─────────────────────────
@@ -820,8 +881,7 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 ## エンドポイント
 ### POST /v1/plan
 - 入力：自然文 or Intent JSON  
-- 出力：**plans[2]**（各1–3アクションの要約とWhy‑this候補）
-
+- 出力：**plans[2]**（各1–3アクションの要約とWhy‑this候補）＋**（任意）confirm_sheet: DSPL**
 ### POST /v1/approve
 - 入力：`plan_id`  
 - 出力：`{ "approve_id": "..." }`（10分有効）
@@ -851,7 +911,6 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - **422_PARTIAL_SUCCESS**：一部実行失敗（結果配列に詳細）
 - **424_PROVIDER_DOWN**：外部コネクタ障害→**.icsフォールバック**
 - **400_CALL_CONSENT_REQUIRED**：`call.place` に必要な事前承認（approve_id）が不足
-
 # ─────────────────────────
 # END: docs/PUBLIC_API.md
 # ─────────────────────────
@@ -879,7 +938,7 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 ## Call Provider Spec（音声通話の外部挿し）
 - `call.place` / `call.status` / `call.summary`（HMAC署名、冪等24h、指数バックオフ）  
 - **Call Consent**：`approve_id`必須（未同意は**400_CALL_CONSENT_REQUIRED**）  
-- SLA目標：`call.status`初回≤5s、`call.summary`終話から≤10s、月間稼働**99.5%+**
+- **JP**：**非通知回避/同一番号/冒頭明示**のガイドライン
 
 ## 価格（初期）
 - **従量**：**$0.03 / アクション**（例：`calendar.create` を1アクション換算）  
@@ -890,6 +949,7 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - 稼働率：**99.5%+（β） / 99.9%（Enterprise）**  
 - レイテンシ：`/v1/plan p50 ≤ 700ms`、`/v1/approve p50 ≤ 100ms`、`/v1/confirm p50 ≤ 300ms`  
 - **AXI外部公開**：`ttc_p50` / `misexec_pct` / `cancel_success_pct` / `rollback_success_pct` / `call_success_pct` / `screen_off_completion_pct`（7日移動平均）
+- **Supply-Chain Trust Panel**を同梱（実行ごとのベンダー/地域/署名の可視化と監査エクスポート）
 
 ## 移行ロードマップ（Yohaku → Action Cloud）
 1) **Yohaku実運用**：通話→予定化テンプレ3本、**AXIを週次公開**、台帳席課金  
@@ -918,7 +978,6 @@ curl -H "Authorization: Bearer $KEY" https://api.yohaku.app/v1/approve -d '{ "pl
 # → { "approve_id":"aprv_abc123" }
 curl -H "Authorization: Bearer $KEY" -H "Idempotency-Key: k_123" https://api.yohaku.app/v1/confirm -d '{ "plan_id":"pl1","approve_id":"aprv_abc123" }'
 ```
-
 # ─────────────────────────
 # END: docs/ACTION_CLOUD.md
 # ─────────────────────────
@@ -967,7 +1026,6 @@ curl -H "Authorization: Bearer $KEY" -H "Idempotency-Key: k_123" https://api.yoh
 ```json
 { "event":"call.summary","request_id":"cp_1","summary":"◯◯クリニックに明日10:30で予約確定。","entities":{"result":"confirmed","date":"2025-10-19","time":"10:30","place":"◯◯クリニック"},"duration_sec":178,"locale":"ja-JP","ts":"2025-10-19T10:10:00Z" }
 ```
-
 # ─────────────────────────
 # END: docs/WEBHOOKS.md
 # ─────────────────────────
@@ -997,8 +1055,8 @@ export interface Connector {
 ```
 
 ## 審査
-- 署名 / 権限スコープ / ロールバック可否 / ConfirmOS互換 / ログ透明性
-
+- HMAC署名（Webhook） / 権限スコープ / **Idempotency-Key必須（24h重複除外）** / **地域固定（データ搬出禁止）**
+- ConfirmOS互換（取消/ロールバック可否の明示） / ログ透明性 / **インシデント通知72h以内**
 # ─────────────────────────
 # END: docs/CONNECTOR_SDK.md
 # ─────────────────────────
@@ -1031,7 +1089,6 @@ Plan.actions:
 - { action: "message.send", to: "相手", text: "ここ行こ！地図→ <url>" }
 - { action: "reminder.create", time: "2025-10-19T18:30:00+09:00", note: "出発" }
 - フォールバック：`call.place` で電話予約→結果に応じて再提案
-
 # ─────────────────────────
 # END: docs/CALL_TEMPLATES.md
 # ─────────────────────────
@@ -1042,7 +1099,6 @@ Plan.actions:
 # ─────────────────────────
 Yohaku Lite（ChatGPT Apps）：7→2→1（Cal+Email）/ Why‑this / ConfirmOS / .ics フォールバック  
 KPI（4週判定）：Top‑1≥55% / TTC p50≤3s / 初回CVR≥20% / Lite MRR≥¥ or 本体送客≥5%
-
 # ─────────────────────────
 # END: docs/YOHAKU_LITE.md
 # ─────────────────────────
@@ -1052,12 +1108,11 @@ KPI（4週判定）：Top‑1≥55% / TTC p50≤3s / 初回CVR≥20% / Lite MRR�
 # BEGIN: docs/CHANGELOG.md
 # ─────────────────────────
 # CHANGELOG
-
+- **2025-12-03**: 供給網リスク対策を強化。ARCHITECTUREに**Default HTTP Headers**（no-referrer/CSP等）を追加、計測を**OpenTelemetry（server-side）**へ統一。SECURITY_PRIVACYに**Third-Party & Telemetry**/**Subprocessors（72h通知）**/**Supply-Chain Trust Panel**を追加。DATA_MODEL/CONFIRM_OSの台帳に**prev_hash**を追加（改ざん検知）。EVALSのSecurity KPIを拡充。OS_INTEGRATIONSに**Confirm Bar α**、DISTRIBUTIONに**Creator Kit**、CONNECTOR_SDKに**Idempotency/地域固定/72h通知**を明記。ACTION_CLOUDに**Trust Panel同梱**を追記。
+- **2025-11-25**: **DSPL（NLUI×GUI）**を導入（Confirm SheetをLLMが構成）。**Irreversibility Gate**をConfirmOSへ追加。**Model Routing Layer**（P0/P1/P2・リージョンゲート）をARCHITECTUREへ追加。**CALL PROVIDER SPEC**に**発信者番号の一貫性/非通知回避/冒頭明示（JP）**を追記。**REGULATORY**に**特商法の補足**を追記。**EVALS**に**Frontier KPI**と**Security KPI**を追加。**DISTRIBUTION**にステータス/セキュリティKPIを明記。
 - **2025-11-06**: READMEに「Yohaku → Action Cloud（最大EVへの道筋）」を追記。`docs/ACTION_CLOUD.md` を新設。`ROADMAP_36M.md` にAction Cloudのβ/GAマイルストーンを明記。DISTRIBUTIONにEarly Accessを追加。
 - **2025-11-04**: ConfirmOSにExecution Ledger追記、Public APIにSLA/SLOとエラー表を追加、CALL PROVIDER SPEC（`call.status`/`call.summary`）を公開、PRD_CALL_OSにWarm Transferとリージョン同意を追記、ARCHITECTUREにIdempotency TTL/Outbox‑Inbox/部分成功を明記、EVALSにAXI（外部公開）を追加、DATA_MODELにledger_eventsを追加、READMEにOpen‑box原則とAXI公開を追記、DISTRIBUTIONにAXI/ステータスページを追加。  
-- **2025-11-05**: READMEに**一言要約（Call‑first）**を追加。**ConfirmOS**に**Call Consent**（`approve_id`必須/TTL10分/エラーコード）を明記。**PRD_CALL_OS**に**Outboundフロー**と**Call Consent必須**を追加。**API_CONTRACTS**に`approve_id`前提を追記。**PUBLIC_API**に`400_CALL_CONSENT_REQUIRED`を追加。
 - **2025-10-16**: Pluggable Memory導入（Provider Interface/API/健康監視/出典表示）、Security&Privacy/EVALS/REGULATORY追加、Nudge窓&予算明確化、reasonsに`source/provider/confidence`を追加。
-
 # ─────────────────────────
 # END: docs/CHANGELOG.md
 # ─────────────────────────

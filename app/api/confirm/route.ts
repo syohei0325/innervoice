@@ -3,6 +3,8 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
+import { supplyChainTracker } from '@/lib/supply-chain';
+import crypto from 'crypto';
 
 // Proposal型定義（page.tsxと一致）
 type Proposal = {
@@ -156,7 +158,24 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // ConfirmOS: Ledger event
+      // ConfirmOS: Ledger event（改ざん検知用ハッシュチェーン）
+      const prevEvent = await prisma.ledgerEvent.findFirst({
+        where: { planId: plan_id || undefined },
+        orderBy: { ts: 'desc' },
+      });
+      
+      const currentEventData = {
+        event_id: eventId,
+        title: proposal?.title,
+        start_time: proposal?.slot,
+      };
+      
+      const prevHash = prevEvent?.prevHash || null;
+      const currentHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(currentEventData) + (prevHash || ''))
+        .digest('hex');
+      
       await prisma.ledgerEvent.create({
         data: {
           approveId: approve_id || null,
@@ -165,12 +184,9 @@ export async function POST(request: NextRequest) {
           actor: 'user',
           status: 'executed',
           beforeJson: null,
-          afterJson: JSON.stringify({
-            event_id: eventId,
-            title: proposal?.title,
-            start_time: proposal?.slot,
-          }),
+          afterJson: JSON.stringify(currentEventData),
           reversible: true,
+          prevHash: currentHash,
         },
       });
 
@@ -184,6 +200,11 @@ export async function POST(request: NextRequest) {
           action: eventId,
         },
       });
+      
+      // Supply-Chain Tracking
+      const action = { action: 'calendar.create', title: proposal?.title };
+      const subprocessors = supplyChainTracker.identifySubprocessors(action);
+      await supplyChainTracker.trackExecution(mockUserId, 'calendar.create', subprocessors);
       
       console.log('[CONFIRM] Database save successful');
     } catch (dbError) {

@@ -24,6 +24,14 @@ export const PlanSchema = z.object({
   id: z.string(),
   summary: z.string(),
   actions: z.array(ActionSchema),
+  reasons: z.array(z.object({
+    key: z.string(),
+    source: z.enum(['core', 'doc']),
+    provider: z.string().optional(),
+    confidence: z.number(),
+    evidence: z.array(z.string()).optional(),
+  })).optional(),
+  confirm_sheet: z.any().optional(), // DSPL ConfirmSheet
 });
 
 export const ExecutionResultSchema = z.object({
