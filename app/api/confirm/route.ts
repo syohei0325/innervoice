@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import { supplyChainTracker } from '@/lib/supply-chain';
+import { generateExecutionReceipt } from '@/lib/poex';
 import crypto from 'crypto';
 
 // Proposal型定義（page.tsxと一致）
@@ -211,6 +212,22 @@ export async function POST(request: NextRequest) {
       console.warn('[CONFIRM] Database save failed (continuing anyway):', dbError);
     }
 
+    // PoEx: Generate Execution Receipt
+    const receiptId = `rcp_${uuidv4()}`;
+    const executionReceipt = generateExecutionReceipt({
+      receipt_id: receiptId,
+      approve_id: approve_id || null,
+      plan_id: plan_id || null,
+      actions: [
+        {
+          action: 'calendar.create',
+          id: eventId,
+          status: 'ok',
+        },
+      ],
+      device_sig: null, // TODO: 将来、端末署名を実装
+    });
+
     const response = {
       success: true,
       ics_url: `/api/download/${eventId}`,
@@ -225,6 +242,8 @@ export async function POST(request: NextRequest) {
       friction_saved: [
         { type: 'app_switch_avoided', qty: 1, evidence: 'measured' },
       ],
+      // PoEx: Execution Receipt
+      exec_receipts: [executionReceipt],
     };
     
     console.log('[CONFIRM] Response ready');

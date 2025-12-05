@@ -610,3 +610,5 @@ Webhooksは将来のバージョンでサポート予定です。詳細は **doc
 - **2025-11-06**: MVP+ APIs追加（Intent Bus / Confirm once）
 - **2025-10-16**: 初版リリース（MVP APIs）
 
+
+

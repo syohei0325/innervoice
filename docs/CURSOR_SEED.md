@@ -14,11 +14,14 @@
 - **勝手に実行しない**：**通話の開始（Call Consent）**と**後続アクションの確定（Confirm once）**はあなたの承認が必要。
 - **NLUI×GUIの連続体**：LLMが生成する**DSPL**（Display‑Specific Language）で**Confirm Sheet**を構成。**7秒→2提案→1確定**を**1画面**で完結。
 
-## 核心体験（MVP）
-- 入力：**7秒**（音声 or 無音テキスト）
-- 出力：**2つの提案**（所要時間ラベル付き）
-- 確定：**1タップで .ics を発行**（片方向フォールバックを常時有効）
-- 画面：**1枚だけ**（Input / Proposals / Confirm / **Value Receipt**）
+## 核心体験（MVP：Phase 2-first「通話→予定化」）
+- 入力：**7秒**（音声/無音テキスト）
+- 実行：**Call Consent**承認→`call.place`→`call.summary`→**PlanA/B**提示
+- 確定：**Confirm once**で `calendar.create / message.send / reminder.create` を**並列実行**
+- フォールバック：**.ics一発発行**（権限未連携/外部ダウン時でも即価値）
+- 画面：**1枚だけ**（Input / PlanA-B / Confirm / **Value Receipt**）
+- KPI（p50）：提案表示≤1.5s / 通話成功≥90% / 誤実行<0.5% / vMB中央値≥6分  
+> 方針：**Phase 1（.icsのみ）をスキップ**し、需要の強い**通話テンプレ**（病院/飲食/再配達）から着手。.icsは**常時フォールバック**として残す。
 
 ## 次の価値（MVP+）: Intent バス & Confirm once Multi‑Action
 - 入力：**7秒**（声/無音テキスト）→ **Intent化**（やりたいことをJSON化）
@@ -125,20 +128,29 @@
 # ─────────────────────
 # BEGIN: docs/PRD_MVP.md
 # ─────────────────────
-# PRD – MVP「7秒→2提案→1確定（.ics）」
+# PRD – MVP（Phase 2-first「通話→予定化テンプレ」）
 
-### ユースケース（3本柱）
-1) 朝の段取り：空き45分→A/B/C  
-2) 移動前：今出る/配車/延期  
-3) 就寝前：明日の自分へ1タスク
+### ユースケース（初期テンプレ3本）
+1) 病院予約（一次診療）：空き枠確認→予約→家族共有→出発リマインド  
+2) 飲食キャンセル/リスケ：現予約の取消→代替スロット提示→確定  
+3) 再配達/配送業者対応：伝票番号→再配達枠確定→カレンダー+通知
 
-### 受け入れ基準
-- 7秒入力→**2提案**→**.ics生成DL**まで **p50≤1.5s**
-- 提案に **duration_min** と開始候補（slot）
-- エラー時は**静音テキストへ自動フォールバック**
-- Value Receipt：軽量トースト（FEA件数主）＋時間は小さく保守的
-- vMB/FEAを記録（UI常時表示はしない）
-- PIIは保存しない（要約+操作メタのみ）
+### 受け入れ基準（必須）
+- **Call Consent**（/api/approve, TTL 10分）なしの通話は送出しない（**400_CALL_CONSENT_REQUIRED**）
+- `call.status` 初回通知 ≤ **5s**、`call.summary` 終話から ≤ **10s**
+- 要約から **PlanA/B**を生成し、**Confirm once**で**2アクション以上**を並列実行
+- **部分成功**でも全体完了扱い（失敗分はリトライ/再提案）
+- **Undo 10秒** / **監査ログ（Execution Ledger）** / **Idempotency-Key（24h）**必須
+- **発信者番号**は非通知不可・再発信時は同一番号、冒頭で「**ユーザー依頼の連絡**」を明示
+- **.icsフォールバック**は常時有効（権限未連携/外部障害時）
+
+### KPI（p50）
+- 提案表示≤1.5s / **通話成功≥90%** / 誤実行<0.5% / vMB中央値≥6分 / Screen‑off≥70%
+
+### 付録：Fallback（.icsのみ）最小要件
+- 7秒入力→**2提案**→**.ics生成DL** p50≤1.5s
+- duration_min / slot 表示、静音テキストへ自動フォールバック
+- PIIは保存せず、要約+操作メタのみを長期保持
 # ─────────────────────
 # END: docs/PRD_MVP.md
 # ─────────────────────
@@ -193,6 +205,14 @@
 - **支払い** / **本人確認** / **規約変更** / **キャンセル不可の操作** は、**二重承認＋Warm Transfer（人間へ引き継ぎ）**を**必須**。
 - Gate命中時は**Autopilot無効**・**録音ON案内**（同意時のみ）・**可逆性フラグ=false**を台帳に記録。
 
+### Proof‑of‑Execution（PoEx：実行証明）
+- `/confirm`ごとに**端末署名（Secure Enclave）**＋**サーバ署名**で**実行レシート**を発行。
+- **週次でMerkle Root**を**透明性ログ**に掲示（第三者検証可）。
+- レシート（例）：
+```json
+{ "receipt_id":"rcp_{{uuid}}", "approve_id":"aprv_abc123", "plan_id":"pl1", "actions":[{"action":"calendar.create","id":"evt_123","status":"ok"}], "ts":"2025-10-19T10:10:02Z", "device_sig":"base64...", "server_sig":"base64...", "merkle_root_week":"2025-W45" }
+```
+
 ### KPI
 - 誤実行率 < 0.5% / 取消成功率 / ロールバック成功率 / 平均承認時間
 
@@ -246,6 +266,7 @@
 - 連絡先リゾルバ：ローカル連絡先 + Graph API
 - **PDV**（端末優先）/ **Policy Engine**（最小共有/JIT権限/用途別トークン）
 - **Memory Provider Layer**：`providers/supermemory|zep|mem0` を **env** と **A/B** で切替
+- **Transparency Log**：週次のMerkle Rootを掲示する簡易ログサービス（署名・監査用）
 
 ### Model Routing Layer（コスト/遅延/規制の中立ルーティング）
 - **データ分類**：`P0=PII/決済/録音実体`、`P1=予約要約/個人名含まず`、`P2=一般推論`  
@@ -379,7 +400,8 @@ Res:
   {"action":"message.send","status":"ok","id":"msg_456"},
   {"action":"reminder.create","status":"ok","id":"rmd_789"}
 ], "minutes_back":18, "minutes_back_confidence":1.0,
-   "friction_saved":[{"type":"copy_paste_avoided","qty":1,"evidence":"measured"}] }
+   "friction_saved":[{"type":"copy_paste_avoided","qty":1,"evidence":"measured"}],
+   "exec_receipts":[{"receipt_id":"rcp_abc","server_sig":"...","device_sig":"..."}] }
 ```
 
 ### GET /api/vibe  /  POST /api/vibe
@@ -650,6 +672,8 @@ KPI: 通話成功≥90% / Screen‑off≥70% / 提案表示p50≤1.5s / vMB中�
 9) **ステータスページ**：status.yohaku.app を掲示（稼働/障害/SLA進捗）
 10) **Action Cloud Early Access**：`yohaku.app/action-cloud` でβ申請（SLA/料金/AXI/セキュリティKPIを明記）
 11) **Creator Kit（配布をプロダクトに同梱）**：①1タップConfirmリンク（.icsフォールバック付）②vMB/FEAの週次カード（画像/縦クリップ自動生成）③紹介リファラ（クリック→有効化→初回確定を可視化）
+12) **AXI Leaderboard**：テンプレ×接続先の公開比較（勝率/遅延/原価）
+13) **Provider 認定バッジ**：Yohaku‑Compatible を配布（リンク先はAXI Leaderboard）
 # ─────────────────────────
 # END: docs/DISTRIBUTION_PLAYBOOK.md
 # ─────────────────────────
@@ -827,7 +851,7 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 # BEGIN: docs/ROADMAP_36M.md
 # ─────────────────────────
 ## 0–6m
-- **Yohaku Wedge**：通話→予定化テンプレ（病院/飲食/再配達）を本番運用
+- **Yohaku Wedge**：通話→予定化テンプレ（病院/飲食/再配達）を本番運用（**Phase 2-first**）
 - **AXI & Security KPI 外部公開**：週次で `ttc_p50 / misexec / cancel / rollback / call_success / screen_off` と `vuln_open / mttr_security_hours ...` を掲示
 - Execution Ledger v0（席課金の設計）、Provider PoC（Twilio/Telnyxのどちらか1社）
 
@@ -835,6 +859,7 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - **Action Cloud β（招待制）**：`/v1/plan → /v1/approve → /v1/confirm` を **SLA 99.5%** で外販（中立）
 - **ConfirmOS強化**：Warm Transfer / 二重承認 / Undo10秒 / **Irreversibility Gate** 本番運用
 - Provider二社冗長（自動降格/ヘルスチェック/A/B）／**Model Routing Layer**のP0/P1/P2運用
+- **AXI Leaderboard** 公開（テンプレ×接続先の勝率/遅延/原価）
 
 ## 12–24m
 - **Action Cloud GA（Enterprise）**：**SLA 99.9%**、リージョン固定、監査証跡API、EU DPA対応
@@ -888,7 +913,7 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 
 ### POST /v1/confirm
 - 入力：`plan_id, approve_id, idempotency_key`  
-- 出力：`results[]`, `minutes_back`, `friction_saved[]`
+- 出力：`results[]`, `minutes_back`, `friction_saved[]`, `exec_receipts[]`
 
 ## Idempotency / バージョニング
 - `Idempotency-Key` ヘッダ必須（重複実行防止）
@@ -949,7 +974,11 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - 稼働率：**99.5%+（β） / 99.9%（Enterprise）**  
 - レイテンシ：`/v1/plan p50 ≤ 700ms`、`/v1/approve p50 ≤ 100ms`、`/v1/confirm p50 ≤ 300ms`  
 - **AXI外部公開**：`ttc_p50` / `misexec_pct` / `cancel_success_pct` / `rollback_success_pct` / `call_success_pct` / `screen_off_completion_pct`（7日移動平均）
-- **Supply-Chain Trust Panel**を同梱（実行ごとのベンダー/地域/署名の可視化と監査エクスポート）
+- **AXI Leaderboard**：テンプレ×接続先の勝率/遅延/コストを公開比較（週次更新）
+
+## Conformance & Provider Program
+- **ConfirmOS Conformance Test**：自動テストスイートで仕様準拠を検証し、合格先に**Yohaku‑Compatible**バッジ付与。
+- **Call Provider 認定**：`call.place/status/summary`の署名/冪等/リージョン固定/インシデント72hを審査。
 
 ## 移行ロードマップ（Yohaku → Action Cloud）
 1) **Yohaku実運用**：通話→予定化テンプレ3本、**AXIを週次公開**、台帳席課金  
@@ -1105,9 +1134,69 @@ KPI（4週判定）：Top‑1≥55% / TTC p50≤3s / 初回CVR≥20% / Lite MRR�
 
 
 # ─────────────────────────
+# BEGIN: docs/MOAT_10_OF_10.md
+# ─────────────────────────
+# 10/10 Moat スコアカード & 実行計画
+
+## 10/10 到達条件（要約）
+- **データモート**：確定データ≥1,000万件/年、**Frontier Ratio≥35%**
+- **埋め込み**：台帳SaaS有償≥1,000社、監査エクスポート≥3,000/月
+- **生態系**：Provider認定≥50社、外部入口からの`/confirm`≥3億/月
+- **COGS**：粗利≥70%、SLA 99.9%
+- **カウンターポジショニング**：売上の≥80%が**成果課金（$0.03/act）＋台帳SaaS**
+- **透明性**：AXI/Security KPI連続52週、クレーム率<0.5%/月
+- **規制/ブランド**：SOC2/ISO+JP/EU準拠、JP通話同意の参照先に
+
+## 12–18か月の実行計画
+### Phase A（0–90日）… **8/10へ**
+- AXI週次公開、通話テンプレ3本で**通話成功≥90%/誤実行<0.5%**
+- Execution Ledger v0（席課金）3社PoC、Provider認定v0開始
+- 2入口（例：ChatGPT Apps/自社App）から `/plan→/approve→/confirm`
+
+### Phase B（3–6か月）… **9/10へ**
+- 台帳SaaS 有償50社、**AXI Leaderboard**公開、Provider認定15社、外部入口5本
+- P0/P1/P2ルーティングの原価ダッシュボード公開、SOC2 Type I着手
+
+### Phase C（6–12か月）… **10/10へ**
+- 台帳SaaS 500–1,000社、外部入口`/confirm`≥1億/月、Provider認定50社、SLA 99.9%
+- 透明性KPI 52週連続、SOC2 Type II/ISO、EU DPA対応、粗利≥70%
+
+## 決定打（Moatをロック）
+1) **PoEx**（実行証明の透明性ログ）
+2) **Conformance Test + Yohaku‑Compatible バッジ**
+3) **AXI Treaty**（公開契約：定義/閾値/返金ルール）
+# ─────────────────────────
+# END: docs/MOAT_10_OF_10.md
+# ─────────────────────────
+
+
+# ─────────────────────────
+# BEGIN: docs/PROVIDER_PROGRAM.md
+# ─────────────────────────
+# Provider 認定プログラム（Call/Connector）
+
+## 目的
+- 品質/規制/透明性を満たす外部プロバイダのみを**Yohaku‑Compatible**として掲載し、AXI Leaderboardで比較可能にする。
+
+## 審査観点
+- 署名（HMAC）/ 冪等（24h）/ 発信者番号ポリシー / 録音・同意の地域差対応 / インシデント72h通知 / データ地域固定
+- ConfirmOS準拠（取消/ロールバック可否の明示）、ログ透明性、SLA
+
+## 等級
+- Silver（基本準拠） / Gold（SLA 99.9%/原価掲示） / Platinum（PoEx連携/台帳統合）
+
+## 公開
+- 認定一覧とSLA/AXI指標を **AXI Leaderboard** に掲示。
+# ─────────────────────────
+# END: docs/PROVIDER_PROGRAM.md
+# ─────────────────────────
+
+
+# ─────────────────────────
 # BEGIN: docs/CHANGELOG.md
 # ─────────────────────────
 # CHANGELOG
+- **2025-12-05**: **Phase 2-first**へ正式ピボット（.ics単体はFallback化）。README/PRD_MVPを更新。**10/10 Moat**のスコアカードと12–18か月計画を追加（`docs/MOAT_10_OF_10.md`）。**PoEx**（実行証明）をConfirmOS/Public APIに追加。**Provider 認定プログラム**と**AXI Leaderboard**を追加/明記。ARCHITECTUREにTransparency Logを追記。
 - **2025-12-03**: 供給網リスク対策を強化。ARCHITECTUREに**Default HTTP Headers**（no-referrer/CSP等）を追加、計測を**OpenTelemetry（server-side）**へ統一。SECURITY_PRIVACYに**Third-Party & Telemetry**/**Subprocessors（72h通知）**/**Supply-Chain Trust Panel**を追加。DATA_MODEL/CONFIRM_OSの台帳に**prev_hash**を追加（改ざん検知）。EVALSのSecurity KPIを拡充。OS_INTEGRATIONSに**Confirm Bar α**、DISTRIBUTIONに**Creator Kit**、CONNECTOR_SDKに**Idempotency/地域固定/72h通知**を明記。ACTION_CLOUDに**Trust Panel同梱**を追記。
 - **2025-11-25**: **DSPL（NLUI×GUI）**を導入（Confirm SheetをLLMが構成）。**Irreversibility Gate**をConfirmOSへ追加。**Model Routing Layer**（P0/P1/P2・リージョンゲート）をARCHITECTUREへ追加。**CALL PROVIDER SPEC**に**発信者番号の一貫性/非通知回避/冒頭明示（JP）**を追記。**REGULATORY**に**特商法の補足**を追記。**EVALS**に**Frontier KPI**と**Security KPI**を追加。**DISTRIBUTION**にステータス/セキュリティKPIを明記。
 - **2025-11-06**: READMEに「Yohaku → Action Cloud（最大EVへの道筋）」を追記。`docs/ACTION_CLOUD.md` を新設。`ROADMAP_36M.md` にAction Cloudのβ/GAマイルストーンを明記。DISTRIBUTIONにEarly Accessを追加。

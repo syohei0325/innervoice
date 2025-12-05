@@ -5,11 +5,14 @@
 - AIがあなたの代わりに必要な**電話**を行い、その結果を**予定・連絡・リマインド**へ**1タップ（Confirm once）**で落とし込む。
 - **勝手に実行しない**：**通話の開始（Call Consent）**と**後続アクションの確定（Confirm once）**はあなたの承認が必要。
 
-## 核心体験（MVP）
-- 入力：**7秒**（音声 or 無音テキスト）
-- 出力：**2つの提案**（所要時間ラベル付き）
-- 確定：**1タップで .ics を発行**（片方向フォールバックを常時有効）
-- 画面：**1枚だけ**（Input / Proposals / Confirm / **Value Receipt**）
+## 核心体験（MVP：Phase 2-first「通話→予定化」）
+- 入力：**7秒**（音声/無音テキスト）
+- 実行：**Call Consent**承認→`call.place`→`call.summary`→**PlanA/B**提示
+- 確定：**Confirm once**で `calendar.create / message.send / reminder.create` を**並列実行**
+- フォールバック：**.ics一発発行**（権限未連携/外部ダウン時でも即価値）
+- 画面：**1枚だけ**（Input / PlanA-B / Confirm / **Value Receipt**）
+- KPI（p50）：提案表示≤1.5s / 通話成功≥90% / 誤実行<0.5% / vMB中央値≥6分  
+> 方針：**Phase 1（.icsのみ）をスキップ**し、需要の強い**通話テンプレ**（病院/飲食/再配達）から着手。.icsは**常時フォールバック**として残す。
 
 ## 次の価値（MVP+）: Intent バス & Confirm once Multi‑Action
 - 入力：**7秒**（声/無音テキスト）→ **Intent化**（やりたいことをJSON化）
@@ -211,4 +214,18 @@ TELEMETRY_WRITE_KEY=your-posthog-key
 - 入口（会話UI/検索/モデル）を持つ大手に対し、Yohaku/Action Cloudは**出口＝結果確定の標準**（**実行のUSB‑C**）を握る。  
 - **Open‑box（AXI/台帳公開）**・**規制整合（Call Consent/監査）**・**プロバイダ中立**をコア原則として維持。
 
-詳細は **docs/ACTION_CLOUD.md** / **docs/ROADMAP_36M.md** / **docs/EVALS.md** を参照。
+**10/10 Moat（競争優位の堀）**
+- **データモート**：確定データ≥1,000万件/年、Frontier Ratio≥35%
+- **埋め込み**：台帳SaaS有償≥1,000社
+- **生態系**：Provider認定≥50社、外部入口からの`/confirm`≥3億/月
+- **COGS**：粗利≥70%、SLA 99.9%
+- **カウンターポジショニング**：売上の≥80%が成果課金＋台帳SaaS
+- **透明性**：AXI/Security KPI連続52週公開
+- **規制/ブランド**：SOC2/ISO+JP/EU準拠
+
+**決定打**
+- **PoEx（実行証明）**：改ざん不可能な証明で信頼を数学的に担保
+- **AXI Leaderboard**：Provider品質を公開比較（勝率/遅延/原価）
+- **Provider認定プログラム**：Yohaku-Compatibleバッジで生態系形成
+
+詳細は **docs/ACTION_CLOUD.md** / **docs/MOAT_10_OF_10.md** / **docs/PROVIDER_PROGRAM.md** / **docs/ROADMAP_36M.md** / **docs/EVALS.md** を参照。
