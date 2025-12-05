@@ -86,6 +86,14 @@
 **ポジショニング**
 - 入口（会話UI/検索/モデル）を持つ大手に対し、Yohaku/Action Cloudは**出口＝結果確定の標準**（**実行のUSB‑C**）を握る。  
 - **Open‑box（AXI/台帳公開）**・**規制整合（Call Consent/監査）**・**プロバイダ中立**をコア原則として維持。
+
+### 0–6m Focus Rules（やらないことリスト）
+- Doraemonモード（Proactive OS / Nudge / Relationship Graph / Partnerモード / Taste）は**0–6mでは実装しない**（ログとデータモデルだけ用意。実行パスは封印）。
+- Pluggable Memory / 外部Doc連携（Drive/Notion/メール等）は**PoCレベル**に留め、本番導入は**Action Cloud β以降**。
+- OS Deep Integration / Browser Extension（Confirm Bar α）は、**Yohaku Wedge（通話→予定化テンプレ3本）のAXIがGo基準を超えるまで後ろ倒し**。
+- Public API / MCPは**Design Partner向け Private β**のみに限定（一般公開はAction Cloud β以降）。
+- 新verticalや新テンプレは、**「通話→予定化テンプレ3本（病院/飲食/再配達）」のAXIが基準値を超えるまでは増やさない**。
+
 # ───────────────
 # END: README.md
 # ───────────────
@@ -117,6 +125,20 @@
 - **声で完了する横断OS**：地図/予約/駐車/移動/連絡/決済を Plan→Confirm once で連鎖実行（APIが無い先は通話）。
 - **好みと記憶の学習**：Taste + Memory + Relationship Graph で当たり率を上げる。
 - **Partnerモード**：同意のもと必要最小の共有。
+
+## Riskiest Assumptions（0–6m）
+1. **電話テンプレ3本だけで、毎週「確定したい用事」が十分に発生するか**  
+   - 病院/飲食/再配達だけで、D30ユーザーが日あたり確定≥3を達成できるか。
+2. **7秒→2→1の1画面UXで、本当にScreen‑off完了率≥70%を出せるか**  
+   - 実際の利用環境（移動中/家族と会話中/車内）でも成り立つか。
+3. **.icsフォールバックだけでも初回のWOWが出るか**  
+   - 権限未連携ユーザーが「とりあえず.icsだけでも便利」と感じてくれるか。
+4. **通話失敗を含むExecution Ledger/AXIの公開が、信頼を下げずにブランドを作れるか**  
+   - 「失敗を隠さず出すこと」が、解約率/NPSにどう効くか。
+
+**方針**：  
+- これら4つが否定された場合は、「通話→予定化テンプレ3本」の組み合わせやチャネル（電話以外）を早期に見直す。  
+- Action Cloud単体SaaSへのピボットも常にオプションとして保持する（ConfirmOS/Execution Ledgerの資産を活かす）。
 
 ## KPI（保守的表示）
 - Top‑1採択率≥55% / 編集距離中央値≤20% / Time‑to‑Confirm p50≤3秒 / Screen‑off≥70% / vMB & FEA並行計測
@@ -661,6 +683,7 @@ KPI: 通話成功≥90% / Screen‑off≥70% / 提案表示p50≤1.5s / vMB中�
 # BEGIN: docs/DISTRIBUTION_PLAYBOOK.md
 # ─────────────────────────
 # 配布の型
+0) **Design Partner プログラム**：病院/飲食/再配達verticalで各5–10社とクローズドβを組み、AXIと失敗パターンを共に見る。`/plan→/approve→/confirm` を実業務に埋め込み、Weekごとにテンプレ/スクリプト/コネクタを改善。
 1) **.icsフッター**：`Scheduled with Yohaku` → 受信側が即体験  
 2) **週次カード共有**：FEA件数＋保守的vMBをSNS/職場共有  
 3) **テンプレ/コネクタ市場（MCP）**：署名/審査/スコープ  
@@ -774,6 +797,20 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - Confirm/実行ごとに**どのベンダに何を渡したか**（目的・期間・地域・署名の有無）を**台帳のUI**で可視化。
 - 署名エラー/越境は**赤帯警告**としてユーザーに提示。エクスポートAPIで外部監査に供する。
 
+## Transparency Policy（Non‑negotiable vs Intentionally Opaque）
+- **必ず開示するもの（Non‑negotiable Transparency）**
+  - `/approve` `/confirm` ごとの Execution Ledger イベント（誰が/何を/いつ/どこで/どの経路で）。
+  - PoEx（実行レシート）の要素：device_sig / server_sig / merkle_root_week。
+  - AXI / Security KPI の集計値と、その定義・計測式。
+- **あえてブラックボックスにするもの（Intentionally Opaque）**
+  - モデル構成・プロンプト・Providerルーティングアルゴリズムなどの内部実装（コアIP）。
+  - vMB / FEA の内部計算テーブルや重み（公開は値と「保守的推定である」方針のみ）。
+  - OrgごとのLoRA / Org Memoryのパラメータ（各Orgの資産として扱う。必要に応じてエクスポートAPIを提供）。
+
+**目的**：  
+- ユーザー/企業/規制当局に対しては「結果と責任」は常に説明できる状態を維持する。  
+- 一方で、競争優位となる内部アルゴリズムや各社の暗黙知は適切に保護し、Yohaku/Action CloudのMoatとして活用する。
+
 ## 透明性
 - Why‑thisに**出典と信頼度**を表示
 - エクスポート/削除API（memory.export / memory.purge）を提供
@@ -854,6 +891,9 @@ KPI：Top‑1/編集距離/TTC/**MB‑lift & FEA‑lift**
 - **Yohaku Wedge**：通話→予定化テンプレ（病院/飲食/再配達）を本番運用（**Phase 2-first**）
 - **AXI & Security KPI 外部公開**：週次で `ttc_p50 / misexec / cancel / rollback / call_success / screen_off` と `vuln_open / mttr_security_hours ...` を掲示
 - Execution Ledger v0（席課金の設計）、Provider PoC（Twilio/Telnyxのどちらか1社）
+- **Design Partner プログラム**：3 vertical × 各5–10社（病院/飲食/再配達）とクローズドβ。  
+  - 各社で週あたり確定≥30件 / 月1のAXIレビュー / テンプレ・スクリプト・コネクタを共創。
+- **非コア機能の凍結**：Doraemonモード / Proactive OS / Taste / Relationship Graph / Browser Extension / OS Deep Integrations / Pluggable Memory本番運用は0–6mでは**実装しない**（データモデルとロギングだけ先に用意）。リソースはYohaku Wedgeの品質とAXI改善に集中。
 
 ## 6–12m
 - **Action Cloud β（招待制）**：`/v1/plan → /v1/approve → /v1/confirm` を **SLA 99.5%** で外販（中立）
@@ -1197,6 +1237,7 @@ KPI（4週判定）：Top‑1≥55% / TTC p50≤3s / 初回CVR≥20% / Lite MRR�
 # ─────────────────────────
 # CHANGELOG
 - **2025-12-05**: **Phase 2-first**へ正式ピボット（.ics単体はFallback化）。README/PRD_MVPを更新。**10/10 Moat**のスコアカードと12–18か月計画を追加（`docs/MOAT_10_OF_10.md`）。**PoEx**（実行証明）をConfirmOS/Public APIに追加。**Provider 認定プログラム**と**AXI Leaderboard**を追加/明記。ARCHITECTUREにTransparency Logを追記。
+- **2025-12-05**: フォーカスと透明性ポリシーを明文化。READMEに**0–6m Focus Rules**を追加、VISIONに**Riskiest Assumptions（0–6m）**を追加、ROADMAP_36Mに**Design Partnerプログラム**と**非コア機能の凍結ルール**を追加。SECURITY_PRIVACYに**Transparency Policy**を追加、DISTRIBUTION_PLAYBOOKに**Design Partner流通チャネル**を追加。
 - **2025-12-03**: 供給網リスク対策を強化。ARCHITECTUREに**Default HTTP Headers**（no-referrer/CSP等）を追加、計測を**OpenTelemetry（server-side）**へ統一。SECURITY_PRIVACYに**Third-Party & Telemetry**/**Subprocessors（72h通知）**/**Supply-Chain Trust Panel**を追加。DATA_MODEL/CONFIRM_OSの台帳に**prev_hash**を追加（改ざん検知）。EVALSのSecurity KPIを拡充。OS_INTEGRATIONSに**Confirm Bar α**、DISTRIBUTIONに**Creator Kit**、CONNECTOR_SDKに**Idempotency/地域固定/72h通知**を明記。ACTION_CLOUDに**Trust Panel同梱**を追記。
 - **2025-11-25**: **DSPL（NLUI×GUI）**を導入（Confirm SheetをLLMが構成）。**Irreversibility Gate**をConfirmOSへ追加。**Model Routing Layer**（P0/P1/P2・リージョンゲート）をARCHITECTUREへ追加。**CALL PROVIDER SPEC**に**発信者番号の一貫性/非通知回避/冒頭明示（JP）**を追記。**REGULATORY**に**特商法の補足**を追記。**EVALS**に**Frontier KPI**と**Security KPI**を追加。**DISTRIBUTION**にステータス/セキュリティKPIを明記。
 - **2025-11-06**: READMEに「Yohaku → Action Cloud（最大EVへの道筋）」を追記。`docs/ACTION_CLOUD.md` を新設。`ROADMAP_36M.md` にAction Cloudのβ/GAマイルストーンを明記。DISTRIBUTIONにEarly Accessを追加。
