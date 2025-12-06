@@ -6,36 +6,50 @@
 
 ---
 
-## 📅 Phase 0: 0–6ヶ月（**Yohaku Wedge：通話→予定化テンプレ3本に集中**）
+## 📅 Phase 0: 0–6ヶ月（**B2C / PLG フェーズ**）
 
-### 戦略：Phase 2-first + Focus Rules
+### 戦略：B2C Phone-Hater Wedge + Call Rules
 
-**方針**：リソースを「通話→予定化テンプレ3本（病院/飲食/再配達）」のPMF達成に集中する。
+**方針**：リソースを「B2C電話代行（電話が嫌いな個人向け）」のPMF達成に集中する。
 
 ### コア機能（実装する）
-- [x] **MVP**（Phase 2-first：通話→予定化）
+- [x] **MVP**（B2C Phone-Hater Wedge：通話→予定化）
   - Call Consent（/api/approve）
   - call.place / call.status / call.summary
   - PlanA/B提示
   - Confirm once（並列実行）
   - .icsフォールバック（常時有効）
+- [ ] **Call Rules（Ethics / Budget / Blacklist）**
+  - 冒頭で依頼者を明示
+  - 発信制限（1ユーザー×1電話先：1日最大2回）
+  - Blacklist管理（DB + UI）
 - [ ] **AXI & Security KPI 外部公開**
   - 週次で `ttc_p50 / misexec / cancel / rollback / call_success / screen_off` を掲示
   - `vuln_open / mttr_security_hours` 等も公開
 - [ ] **Execution Ledger v0**（席課金の設計）
 - [ ] **Provider PoC**（Twilio/Telnyxのどちらか1社）
 
-### Design Partner プログラム（最優先）
-- [ ] **3 vertical × 各5–10社**（病院/飲食/再配達）とクローズドβ
-  - 各社で週あたり確定≥30件
-  - 月1のAXIレビュー
-  - テンプレ・スクリプト・コネクタを共創
-- [ ] **Go基準**：Design Partner 15-30社獲得（6ヶ月時点）
+### PLG（Product-Led Growth）ループ（最優先）
+- [ ] **SNS共有機能**
+  - 「今週、電話を◯件やらずに済みました 📞→✅」カード
+  - `Scheduled with Yohaku` フッター（opt-out可）
+- [ ] **Founder Story / Buildログ**
+  - YouTube/Xで「電話筋肉ゼロ化への挑戦」を継続共有
+- [ ] **リファラルプログラム**
+  - クリック→有効化→初回確定を可視化
+
+### Design Partner / Aggregator（リサーチのみ）
+- [ ] **病院/予約SaaS/BPO**と非公式なヒアリングやPoCレベルの対話
+  - 0–6mでは正式な営業/導入は急がない
+  - B2Cで一定のトラフィックとAXI実績が出た後に検討
 
 ### 非コア機能の凍結（実装しない）
 
 **以下は0–6mでは実装しない**（データモデルとロギングだけ先に用意）：
 
+- ❌ **事業者向け営業/提携**（病院/飲食/配送会社等）
+  - リサーチとヒアリングは継続（将来の布石）
+  - 正式な営業/導入は6m以降
 - ❌ **Doraemonモード**（Proactive OS / Nudge / Relationship Graph / Partnerモード / Taste）
   - 実行パスは封印
   - ログとデータモデルだけ用意
@@ -43,16 +57,16 @@
   - PoCレベルに留める
   - 本番導入はAction Cloud β以降
 - ❌ **OS Deep Integration / Browser Extension**（Confirm Bar α）
-  - Yohaku WedgeのAXIがGo基準を超えるまで後ろ倒し
+  - B2C WedgeのAXIがGo基準を超えるまで後ろ倒し
 - ❌ **Public API / MCP一般公開**
-  - Design Partner向けPrivate βのみ
+  - 友好的なエージェントチーム（3–5）向け Private βのみ
 - ❌ **新verticalや新テンプレ**
-  - 3本（病院/飲食/再配達）のAXIが基準値を超えるまでは増やさない
+  - B2C Wedge（電話代行テンプレ）のAXIが基準値を超えるまでは増やさない
 
 ### 理由
-1. **リソースの集中**：分散させず、3本の品質とAXI改善に全力
-2. **早期PMF検証**：機能を増やす前に、3本で十分な頻度が出るか確認
-3. **失敗の早期検出**：6ヶ月でダメなら早期ピボット（Action Cloud単体SaaSへ）
+1. **リソースの集中**：B2C個人ユーザーの体験とCall Rulesに全力
+2. **早期PMF検証**：事業者営業の前に、個人ユーザーの頻度を検証
+3. **迷惑電話化を防ぐ**：Call Rulesで事業者との関係を悪化させない
 
 ### Go基準（6ヶ月時点）
 - ✅ 通話成功率 ≥ 90%
@@ -60,9 +74,9 @@
 - ✅ 日あたり確定 ≥ 3
 - ✅ vMB中央値 ≥ 6分
 - ✅ NPS ≥ 50
-- ✅ Design Partner 15-30社獲得
+- ✅ **Call Rules違反 = 0件**（最重要）
 
-**これらを達成したら、次の機能開発に進む。達成できなければピボット。**
+**これらを達成したら、Action Cloud Private β（エージェント向け）に進む。達成できなければピボット。**
 
 ---
 

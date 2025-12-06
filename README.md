@@ -1,18 +1,38 @@
-# Yohaku – 7秒で「決めて、置く」。スクリーンから人を解放する相棒
-> We don't optimize for screen‑time. We optimize for life‑time.
+# Yohaku – 7秒で「決めて、置く」。スクリーンと電話から人を解放する相棒
+> We don't optimize for screen‑time. We optimize for life‑time.  
+> We also don't optimize for call‑time. We optimize for "no‑call" time.
 
-### 一言要約（Call‑first）
-- AIがあなたの代わりに必要な**電話**を行い、その結果を**予定・連絡・リマインド**へ**1タップ（Confirm once）**で落とし込む。
-- **勝手に実行しない**：**通話の開始（Call Consent）**と**後続アクションの確定（Confirm once）**はあなたの承認が必要。
+### 一言要約（B2C / 電話嫌いユーザー向け）
+- 電話が嫌いなあなたの代わりに、**病院 / 再配達 / 美容室 / 役所**などに電話してくれる AI 相棒。
+- あなたは **7秒**だけ「やりたいこと」を話す or 打つ。Yohakuが
+  - **2つの実行プラン（PlanA/B）**を提案し、
+  - **あなたの代わりに電話**し、
+  - 結果を **予定・連絡・リマインド**へ **1タップ（Confirm once）**で落とし込む。
+- 電話の相手先（病院/事業者）は Yohaku を知らない前提。  
+  そのため **Call Ethics / Call Budget / Blacklist** を厳格に守り、
+  - 勧誘・営業と誤認されないこと
+  - しつこいロボコールにならないこと
+  を最優先する。
 
-## 核心体験（MVP：Phase 2-first「通話→予定化」）
-- 入力：**7秒**（音声/無音テキスト）
-- 実行：**Call Consent**承認→`call.place`→`call.summary`→**PlanA/B**提示
-- 確定：**Confirm once**で `calendar.create / message.send / reminder.create` を**並列実行**
-- フォールバック：**.ics一発発行**（権限未連携/外部ダウン時でも即価値）
+## 核心体験（MVP：B2C Phone-Hater Wedge「通話→予定化」）
+- 入力：**7秒**（音声/テキスト）  
+  例：「明日の午前中で◯◯クリニック予約して」「不在票の再配達お願いしといて」
+- 実行：
+  - `/api/propose` が意図を推定（病院 / 再配達 / サロン / 行政 など）
+  - **PlanA/B**（日時/場所/連絡手段の異なる2案）を生成
+- 確定：
+  - ユーザーが **Confirm once**（1タップ）  
+  - `call.place`（代行電話）→ `call.summary`（結果）→  
+    `calendar.create / message.send / reminder.create` を**並列実行**
+- フォールバック：
+  - 外部連携や通話が失敗/制限された場合は **.ics一発発行**（権限未連携/外部ダウンでも即価値）
 - 画面：**1枚だけ**（Input / PlanA-B / Confirm / **Value Receipt**）
-- KPI（p50）：提案表示≤1.5s / 通話成功≥90% / 誤実行<0.5% / vMB中央値≥6分  
-> 方針：**Phase 1（.icsのみ）をスキップ**し、需要の強い**通話テンプレ**（病院/飲食/再配達）から着手。.icsは**常時フォールバック**として残す。
+- KPI（p50）：提案表示≤1.5s / 通話成功≥90% / 誤実行<0.5% / vMB中央値≥6分 / Screen‑off≥70%
+
+> 0–6m 方針：  
+> - **B2C / PLG モード**で「電話が嫌いな個人」の体験と指標に集中する。  
+> - 病院/事業者側への営業・提携は行わず、代わりに **Call Rules（Ethics / Budget / Blacklist）** で迷惑電話化を防ぐ。  
+> - 病院予約は最重要ユースケースの1つだが、「病院vertical営業」ではなく「ユーザーのペインが強い典型例」として扱う。
 
 ## 次の価値（MVP+）: Intent バス & Confirm once Multi‑Action
 - 入力：**7秒**（声/無音テキスト）→ **Intent化**（やりたいことをJSON化）
@@ -47,34 +67,42 @@
 - **Care Pack**：在宅介護の外周（通院/服薬/家族連絡）
 - 共通：**ConfirmOS**（承認/取消/監査/二重承認）で安全性を規格化
 
-## 北極星（PMF検証KPI）
+## 北極星（B2C PMF検証KPI）
 - Median **vMB ≥ 15分/日**（D30継続ユーザー｜保守的推定）
 - **Screen‑off完了率 ≥ 70%（Carモード含む）**
-- **FEA ≥ 10/週（p50）**（アプリ跨ぎ/コピペ/フォーム入力などの削減件数）
+- **FEA ≥ 10/週（p50）**
 - **Nudge採択率 ≥ 25% / 誤提案 ≤ 10% / 誤実行率 < 0.5%**
 - D1≥60% / D7≥35% / D30≥25% / 日あたり確定≥3 / NPS≥50
 
-## 0–6m Focus Rules（やらないことリスト）
+## 0–6m Focus Rules（B2C / PLG モード）
 
-**方針**：リソースを「通話→予定化テンプレ3本（病院/飲食/再配達）」のPMF達成に集中する。
+**方針**：リソースを「B2C電話代行Wedge（電話が嫌いな個人向け）」のPMF達成に集中する。
+
+### Yohaku Wedge（0–6m）は「電話が嫌いな個人」向け「汎用電話代行」
+- 病院予約 / 再配達 / サロン / 行政問い合わせなどをサポートするが、  
+  あくまで**ユーザー側のペイン**にフォーカスし、事業者側への営業は行わない。
+- **Call Rules（Ethics/Budget/Blacklist）**を厳格に守り、迷惑電話化を防ぐ。
 
 ### やらないこと
+- ❌ **事業者向け営業/提携**（病院/飲食/配送会社等）は**0–6mでは行わない**
+  - リサーチとヒアリングは継続（将来の布石）
+  - 正式な営業/導入は6m以降
 - ❌ **Doraemonモード**（Proactive OS / Nudge / Relationship Graph / Partnerモード / Taste）は**0–6mでは実装しない**
   - データモデルとロギングだけ用意
   - 実行パスは封印
 - ❌ **Pluggable Memory / 外部Doc連携**（Drive/Notion/メール等）は**PoCレベル**に留める
   - 本番導入は**Action Cloud β以降**
 - ❌ **OS Deep Integration / Browser Extension**（Confirm Bar α）は後ろ倒し
-  - **Yohaku Wedge（通話→予定化テンプレ3本）のAXIがGo基準を超えるまで**
-- ❌ **Public API / MCP**は**Design Partner向け Private β**のみに限定
-  - 一般公開はAction Cloud β以降
+  - **B2C Wedge（電話代行テンプレ）のAXIがGo基準を超えるまで**
+- ❌ **Public API / MCP一般公開**は後回し
+  - 友好的なエージェントチーム（3–5）向け Private βのみ
 - ❌ **新verticalや新テンプレ**は増やさない
-  - **「通話→予定化テンプレ3本（病院/飲食/再配達）」のAXIが基準値を超えるまで**
+  - **B2C Wedge（電話代行テンプレ）のAXIが基準値を超えるまで**
 
 ### 理由
-1. **リソースの集中**：分散させず、3本の品質とAXI改善に全力
-2. **早期PMF検証**：機能を増やす前に、3本で十分な頻度が出るか確認
-3. **失敗の早期検出**：6ヶ月でダメなら早期ピボット（Action Cloud単体SaaSへ）
+1. **リソースの集中**：B2C個人ユーザーの体験とCall Rulesに全力
+2. **早期PMF検証**：事業者営業の前に、個人ユーザーの頻度を検証
+3. **迷惑電話化を防ぐ**：Call Rulesで事業者との関係を悪化させない
 
 ### Go基準（6ヶ月時点）
 - ✅ 通話成功率 ≥ 90%
@@ -82,8 +110,9 @@
 - ✅ 日あたり確定 ≥ 3
 - ✅ vMB中央値 ≥ 6分
 - ✅ NPS ≥ 50
+- ✅ Call Rules違反 = 0件
 
-**これらを達成したら、次の機能開発に進む。達成できなければピボット。**
+**これらを達成したら、Action Cloud Private β（エージェント向け）に進む。達成できなければピボット。**
 
 ## 開発クイックスタート
 ```bash
