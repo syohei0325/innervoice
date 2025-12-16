@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const intent = await detectIntent(text, openai);
     console.log('[/api/propose] Detected intent:', intent);
 
-    // ステップ2: PlanA/B生成
+    // ステップ2: 1つのプランを生成（PlanA/Bは不要）
     const plans = await generatePlans(
       {
         intent,
@@ -71,6 +71,9 @@ export async function POST(request: NextRequest) {
       },
       openai
     );
+    
+    // 最初のプランのみを返す
+    const plan = plans[0];
 
     const latency = Date.now() - startTime;
 
@@ -81,41 +84,26 @@ export async function POST(request: NextRequest) {
         requiresCall: intent.requiresCall,
         confidence: intent.confidence,
       },
-      plans,
+      plan, // 1つのプランのみ
       latency_ms: latency,
     });
   } catch (error) {
     console.error('Error in /api/propose:', error);
     
-    // フォールバック: シンプルなプラン
-    const fallbackPlans = [
-      {
-        id: `plan_${Date.now()}_a`,
-        summary: '予定A（30分）',
-        actions: [
-          {
-            action: 'calendar.create',
-            title: '予定',
-            start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            duration_min: 30,
-          },
-        ],
-        reasons: [],
-      },
-      {
-        id: `plan_${Date.now()}_b`,
-        summary: '予定B（15分・短縮版）',
-        actions: [
-          {
-            action: 'calendar.create',
-            title: '予定（短縮版）',
-            start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            duration_min: 15,
-          },
-        ],
-        reasons: [],
-      },
-    ];
+    // フォールバック: シンプルなプラン（1つのみ）
+    const fallbackPlan = {
+      id: `plan_${Date.now()}`,
+      summary: '予定を作成します',
+      actions: [
+        {
+          action: 'calendar.create' as const,
+          title: '予定',
+          start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          duration_min: 30,
+        },
+      ],
+      reasons: [],
+    };
 
     return NextResponse.json({
       intent: {
@@ -124,7 +112,7 @@ export async function POST(request: NextRequest) {
         requiresCall: false,
         confidence: 0.5,
       },
-      plans: fallbackPlans,
+      plan: fallbackPlan,
       latency_ms: Date.now() - startTime,
       fallback: true,
     });

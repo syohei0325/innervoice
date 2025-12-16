@@ -149,7 +149,7 @@ export default function InputBar({ onInput, isLoading }: InputBarProps) {
           disabled={!text.trim() || isLoading || isVoiceMode}
           className="w-full confirm-button"
         >
-          {isLoading ? 'AI分析中...' : '2つのプランを取得'}
+          {isLoading ? 'AI分析中...' : '実行'}
         </button>
       </form>
     </div>

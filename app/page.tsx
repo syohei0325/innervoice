@@ -2,28 +2,17 @@
 
 import { useState } from 'react';
 import InputBar from './components/InputBar';
-import ProposalList from './components/ProposalList';
 import MBMeter from './components/MBMeter';
-import ConfirmSheet from './components/ConfirmSheet';
 import Footer from './components/Footer';
 import ValueReceipt from './components/ValueReceipt';
 import LoadingSpinner from './components/LoadingSpinner';
 import { Plan } from '@/lib/intent';
 
-export type Proposal = {
-  id: string;
-  title: string;
-  slot: string;
-  duration_min: number;
-};
-
 export default function Home() {
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [intentInfo, setIntentInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [minutesBackToday, setMinutesBackToday] = useState(0);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   
   // Value Receipt state
@@ -33,8 +22,7 @@ export default function Home() {
 
   const handleInput = async (text: string) => {
     setIsLoading(true);
-    setProposals([]);
-    setPlans([]);
+    setCurrentPlan(null);
     setIntentInfo(null);
     
     try {
@@ -52,144 +40,99 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get proposals');
+        throw new Error('Failed to get plan');
       }
       
       const data = await response.json();
       console.log('[Home] Received data:', data);
       
-      // 新しいAPI形式（intent + plans）
-      if (data.intent && data.plans) {
+      // 新しいAPI形式（intent + plan）
+      if (data.intent && data.plan) {
         setIntentInfo(data.intent);
-        setPlans(data.plans);
+        setCurrentPlan(data.plan);
         
-        // 後方互換性のため、proposalsも生成
-        const legacyProposals = data.plans.map((plan: Plan) => ({
-          id: plan.id,
-          title: plan.summary,
-          slot: '09:00', // デフォルト値
-          duration_min: 30,
-        }));
-        setProposals(legacyProposals);
-      } 
-      // 古いAPI形式（proposals）
-      else if (data.proposals && data.proposals.length > 0) {
-        setProposals(data.proposals);
+        // 電話が必要な場合は、すぐに確認画面を表示
+        if (data.intent.requiresCall) {
+          // 確認画面に進む（自動的に表示される）
+        } else {
+          // 単純なカレンダー予定の場合は、即座に実行
+          await executeSimplePlan(data.plan);
+        }
       } 
       // フォールバック
       else {
-        setProposals([
-          {
-            id: 'fallback-1',
-            title: text.substring(0, 30),
-            slot: '09:00',
-            duration_min: 30,
-          },
-          {
-            id: 'fallback-2',
-            title: text.substring(0, 30),
-            slot: '14:00',
-            duration_min: 30,
-          },
-        ]);
-        alert('⚠️ AI提案の生成に失敗しました。フォールバック提案を表示しています。');
+        const fallbackPlan: Plan = {
+          id: `plan_${Date.now()}`,
+          summary: text.substring(0, 30),
+          actions: [
+            {
+              action: 'calendar.create',
+              title: text.substring(0, 50),
+              start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              duration_min: 30,
+            },
+          ],
+          reasons: [],
+        };
+        setCurrentPlan(fallbackPlan);
+        alert('⚠️ AI提案の生成に失敗しました。フォールバックプランを表示しています。');
       }
       
-      // Track event: proposals_shown
+      // Track event: plan_shown
       // TODO: Add telemetry
     } catch (error) {
-      console.error('Error getting proposals:', error);
+      console.error('Error getting plan:', error);
       
-      // Show fallback proposals
-      setProposals([
-        {
-          id: 'fallback-1',
-          title: text.substring(0, 30),
-          slot: '09:00',
-          duration_min: 30,
-        },
-        {
-          id: 'fallback-2',
-          title: text.substring(0, 30),
-          slot: '14:00',
-          duration_min: 30,
-        },
-      ]);
-      alert('⚠️ 提案の取得に失敗しました。フォールバック提案を表示しています。\n\n環境変数（OPENAI_API_KEY）が正しく設定されているか確認してください。');
+      // Show fallback plan
+      const fallbackPlan: Plan = {
+        id: `plan_${Date.now()}`,
+        summary: text.substring(0, 30),
+        actions: [
+          {
+            action: 'calendar.create',
+            title: text.substring(0, 50),
+            start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            duration_min: 30,
+          },
+        ],
+        reasons: [],
+      };
+      setCurrentPlan(fallbackPlan);
+      alert('⚠️ プランの取得に失敗しました。\n\n環境変数（OPENAI_API_KEY）が正しく設定されているか確認してください。');
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleProposalClick = async (proposalId: string) => {
-    // 新しいAPI形式: plansが既にある場合
-    if (plans.length > 0) {
-      const plan = plans.find(p => p.id === proposalId);
-      if (plan) {
-        setSelectedPlan(plan);
-        return;
-      }
-    }
-    
-    // MVP+: Generate plans from proposal
+  
+  // 単純なプランを即座に実行
+  const executeSimplePlan = async (plan: Plan) => {
+    setIsExecuting(true);
     try {
-      const response = await fetch('/api/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          proposal_id: proposalId,
-          context: { tz: 'Asia/Tokyo' }
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to generate plans');
-      
-      const data = await response.json();
-      
-      if (data.plans && data.plans.length > 0) {
-        // Show first plan in ConfirmSheet
-        setSelectedPlan(data.plans[0]);
-      }
-    } catch (error) {
-      console.error('Error generating plans:', error);
-      // Fallback to MVP behavior
-      handleConfirmMVP(proposalId);
-    }
-  };
-
-  const handleConfirmMVP = async (proposalId: string) => {
-    // Original MVP behavior (fallback)
-    try {
-      // 提案データを取得
-      const proposal = proposals.find(p => p.id === proposalId);
-      
       const response = await fetch('/api/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          proposal_id: proposalId,
-          proposal: proposal // 提案データも送信
+          plan_id: plan.id,
+          plan: plan,
+          enabled_actions: plan.actions.map(a => a.action)
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to confirm proposal');
+      if (!response.ok) throw new Error('Failed to execute plan');
       
       const data = await response.json();
       
       // Download .ics file
       if (data.ics_content) {
-        // 直接.icsファイルをダウンロード
         const blob = new Blob([data.ics_content], { type: 'text/calendar' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `innervoice-${data.event_id}.ics`;
+        a.download = `yohaku-${data.event_id || Date.now()}.ics`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-      } else if (data.ics_url) {
-        window.open(data.ics_url, '_blank');
       }
       
       // Update minutes back
@@ -198,7 +141,7 @@ export default function Home() {
         setLastMinutesBack(data.minutes_back);
       }
       
-      // Update FEA (Friction Events Avoided)
+      // Update FEA
       if (data.friction_saved) {
         setLastFrictionSaved(data.friction_saved);
       }
@@ -206,29 +149,30 @@ export default function Home() {
       // Show Value Receipt
       setShowValueReceipt(true);
       
-      // Reset proposals
-      setProposals([]);
+      // Reset
+      setCurrentPlan(null);
       
-      // Track events: confirmed, ics_downloaded, minutes_back_added
-      // TODO: Add telemetry
     } catch (error) {
-      console.error('Error confirming proposal:', error);
+      console.error('Error executing plan:', error);
+      alert('❌ プランの実行に失敗しました。');
+    } finally {
+      setIsExecuting(false);
     }
   };
 
-  const handlePlanConfirm = async (planId: string, enabledActions: string[]) => {
+  // 電話が必要なプランを確定
+  const handleConfirmCall = async () => {
+    if (!currentPlan) return;
+    
     setIsExecuting(true);
     try {
-      // Planを取得
-      const plan = plans.find(p => p.id === planId) || selectedPlan;
-      
       const response = await fetch('/api/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          plan_id: planId,
-          plan: plan, // Planデータも送信
-          enabled_actions: enabledActions 
+          plan_id: currentPlan.id,
+          plan: currentPlan,
+          enabled_actions: currentPlan.actions.map(a => a.action)
         }),
       });
 
@@ -241,13 +185,26 @@ export default function Home() {
         alert(`📞 通話完了\n\n${data.call_summary}`);
       }
       
+      // Download .ics file
+      if (data.ics_content) {
+        const blob = new Blob([data.ics_content], { type: 'text/calendar' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `yohaku-${data.event_id || Date.now()}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      
       // Update minutes back
       if (data.minutes_back) {
         setMinutesBackToday(prev => prev + data.minutes_back);
         setLastMinutesBack(data.minutes_back);
       }
       
-      // Update FEA (Friction Events Avoided)
+      // Update FEA
       if (data.friction_saved) {
         setLastFrictionSaved(data.friction_saved);
       }
@@ -255,35 +212,8 @@ export default function Home() {
       // Show Value Receipt
       setShowValueReceipt(true);
       
-      // Show results (only for errors)
-      if (data.execution_status !== 'success' && !data.ics_url) {
-        alert(`⚠️ 一部のアクションが失敗しました。詳細をご確認ください。`);
-      }
-      
-      // Download .ics file if available
-      if (data.ics_content) {
-        // 直接.icsファイルをダウンロード
-        const blob = new Blob([data.ics_content], { type: 'text/calendar' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `innervoice-${data.event_id || Date.now()}.ics`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else if (data.ics_url) {
-        window.open(data.ics_url, '_blank');
-      }
-      
-      // Update minutes back
-      if (data.minutes_back) {
-        setMinutesBackToday(prev => prev + data.minutes_back);
-      }
-      
-      // Reset states
-      setSelectedPlan(null);
-      setProposals([]);
+      // Reset
+      setCurrentPlan(null);
       
     } catch (error) {
       console.error('Error executing plan:', error);
@@ -293,9 +223,6 @@ export default function Home() {
     }
   };
 
-  const handlePlanCancel = () => {
-    setSelectedPlan(null);
-  };
 
   return (
     <main className="container mx-auto px-4 py-8 max-w-2xl">
@@ -324,23 +251,66 @@ export default function Home() {
           </div>
         </div>
 
-        <InputBar onInput={handleInput} isLoading={isLoading} />
+        <InputBar onInput={handleInput} isLoading={isLoading || isExecuting} />
         
         {isLoading && (
-          <LoadingSpinner text="AI が提案を生成中..." />
+          <LoadingSpinner text="AI が分析中..." />
         )}
         
-        {!isLoading && proposals.length > 0 && (
-          <ProposalList proposals={proposals} onConfirm={handleProposalClick} />
+        {isExecuting && (
+          <LoadingSpinner text="電話中..." />
         )}
         
-        {selectedPlan && (
-          <ConfirmSheet
-            plan={selectedPlan}
-            onConfirm={handlePlanConfirm}
-            onCancel={handlePlanCancel}
-            isExecuting={isExecuting}
-          />
+        {!isLoading && !isExecuting && currentPlan && intentInfo?.requiresCall && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">📞 実行内容の確認</h3>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex items-start space-x-3">
+                <span className="text-2xl">📞</span>
+                <div>
+                  <p className="font-medium text-gray-900">{intentInfo.description}</p>
+                  <p className="text-sm text-gray-600">{currentPlan.summary}</p>
+                </div>
+              </div>
+              
+              {currentPlan.actions.map((action, idx) => (
+                <div key={idx} className="flex items-start space-x-3 pl-8">
+                  <span className="text-lg">
+                    {action.action === 'call.place' && '☎️'}
+                    {action.action === 'calendar.create' && '📅'}
+                    {action.action === 'message.send' && '💬'}
+                    {action.action === 'reminder.create' && '⏰'}
+                  </span>
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      {action.action === 'call.place' && `電話: ${(action as any).purpose || '予約'}`}
+                      {action.action === 'calendar.create' && `カレンダー: ${action.title}`}
+                      {action.action === 'message.send' && `メッセージ: ${action.to}へ`}
+                      {action.action === 'reminder.create' && `リマインダー: ${action.note}`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={handleConfirmCall}
+                disabled={isExecuting}
+                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {isExecuting ? '実行中...' : '電話して予約'}
+              </button>
+              <button
+                onClick={() => setCurrentPlan(null)}
+                disabled={isExecuting}
+                className="px-6 py-3 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:cursor-not-allowed transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
         )}
         
         <MBMeter minutesBack={minutesBackToday} />
