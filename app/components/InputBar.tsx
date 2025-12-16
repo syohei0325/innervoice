@@ -100,56 +100,49 @@ export default function InputBar({ onInput, isLoading }: InputBarProps) {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
+    <div className="max-w-2xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex items-center space-x-2 mb-3">
-          <button
-            type="button"
-            onClick={handleVoiceToggle}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-              isVoiceMode 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {isVoiceMode ? '🎤 音声' : '⌨️ テキスト'}
-          </button>
-          <span className="text-sm text-gray-500">7秒で入力</span>
-        </div>
-        
         <div className="relative">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={isVoiceMode ? '音声入力中...' : '明日の午前中で◯◯クリニック予約して'}
-            className="input-bar resize-none h-20"
+            placeholder={isVoiceMode ? '...' : '明日の午前中で田中クリニック予約して'}
+            className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:outline-none resize-none transition-colors"
+            rows={3}
             disabled={isLoading || isVoiceMode}
           />
           {isVoiceMode && (
-            <div className="absolute inset-0 bg-blue-50 bg-opacity-80 flex items-center justify-center rounded-lg">
-              <div className="flex flex-col items-center gap-2">
-                <div className={`text-4xl ${isListening ? 'animate-pulse' : ''}`}>🎤</div>
-                <div className="text-blue-600 font-medium">
-                  {isListening ? '話してください...' : '音声入力準備中...'}
-                </div>
+            <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center rounded-2xl">
+              <div className="flex flex-col items-center gap-3">
+                <div className={`text-5xl ${isListening ? 'animate-pulse' : ''}`}>🎤</div>
                 <button
                   type="button"
                   onClick={handleVoiceToggle}
-                  className="text-sm text-blue-500 underline"
+                  className="text-sm text-gray-500 hover:text-gray-700"
                 >
                   キャンセル
                 </button>
               </div>
             </div>
           )}
+          {voiceSupported && !isVoiceMode && (
+            <button
+              type="button"
+              onClick={handleVoiceToggle}
+              className="absolute right-4 top-4 text-2xl hover:scale-110 transition-transform"
+              disabled={isLoading}
+            >
+              🎤
+            </button>
+          )}
         </div>
         
         <button
           type="submit"
           disabled={!text.trim() || isLoading || isVoiceMode}
-          className="w-full confirm-button"
+          className="w-full bg-blue-600 text-white px-8 py-4 rounded-2xl font-medium text-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
-          {isLoading ? 'AI分析中...' : '実行'}
+          {isLoading ? '...' : '実行'}
         </button>
       </form>
     </div>

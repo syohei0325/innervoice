@@ -2,17 +2,13 @@
 
 import { useState } from 'react';
 import InputBar from './components/InputBar';
-import MBMeter from './components/MBMeter';
-import Footer from './components/Footer';
 import ValueReceipt from './components/ValueReceipt';
-import LoadingSpinner from './components/LoadingSpinner';
 import { Plan } from '@/lib/intent';
 
 export default function Home() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [intentInfo, setIntentInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [minutesBackToday, setMinutesBackToday] = useState(0);
   const [isExecuting, setIsExecuting] = useState(false);
   
   // Value Receipt state
@@ -137,7 +133,6 @@ export default function Home() {
       
       // Update minutes back
       if (data.minutes_back) {
-        setMinutesBackToday(prev => prev + data.minutes_back);
         setLastMinutesBack(data.minutes_back);
       }
       
@@ -200,7 +195,6 @@ export default function Home() {
       
       // Update minutes back
       if (data.minutes_back) {
-        setMinutesBackToday(prev => prev + data.minutes_back);
         setLastMinutesBack(data.minutes_back);
       }
       
@@ -225,69 +219,43 @@ export default function Home() {
 
 
   return (
-    <main className="container mx-auto px-4 py-8 max-w-2xl">
-      <div className="space-y-6">
+    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-3xl space-y-8">
         <div className="text-center">
-          <div className="mb-4">
-            <span className="text-5xl">🗓️</span>
-          </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">Yohaku</h1>
-          <p className="text-xl text-gray-700 mb-2">7秒で「決めて、置く」</p>
-          <p className="text-sm text-gray-500 max-w-md mx-auto">
-            AIがあなたの代わりに必要な電話を行い、その結果を予定・連絡・リマインドへ1タップで落とし込む
-          </p>
-          
-          {/* Feature badges */}
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
-            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-              🎤 音声入力
-            </span>
-            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-              ⚡ 1タップ確定
-            </span>
-            <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
-              📅 .ics自動生成
-            </span>
-          </div>
+          <h1 className="text-6xl font-bold text-gray-900">Yohaku</h1>
         </div>
 
         <InputBar onInput={handleInput} isLoading={isLoading || isExecuting} />
         
         {isLoading && (
-          <LoadingSpinner text="AI が分析中..." />
+          <div className="text-center py-12">
+            <div className="text-4xl animate-pulse">⏳</div>
+          </div>
         )}
         
         {isExecuting && (
-          <LoadingSpinner text="電話中..." />
+          <div className="text-center py-12">
+            <div className="text-4xl animate-pulse">📞</div>
+          </div>
         )}
         
         {!isLoading && !isExecuting && currentPlan && intentInfo?.requiresCall && (
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📞 実行内容の確認</h3>
-            
-            <div className="space-y-3 mb-6">
-              <div className="flex items-start space-x-3">
-                <span className="text-2xl">📞</span>
-                <div>
-                  <p className="font-medium text-gray-900">{intentInfo.description}</p>
-                  <p className="text-sm text-gray-600">{currentPlan.summary}</p>
-                </div>
-              </div>
-              
+          <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+            <div className="space-y-4 mb-6">
               {currentPlan.actions.map((action, idx) => (
-                <div key={idx} className="flex items-start space-x-3 pl-8">
-                  <span className="text-lg">
-                    {action.action === 'call.place' && '☎️'}
+                <div key={idx} className="flex items-center space-x-3">
+                  <span className="text-2xl">
+                    {action.action === 'call.place' && '📞'}
                     {action.action === 'calendar.create' && '📅'}
                     {action.action === 'message.send' && '💬'}
                     {action.action === 'reminder.create' && '⏰'}
                   </span>
                   <div>
-                    <p className="text-sm text-gray-700">
-                      {action.action === 'call.place' && `電話: ${(action as any).purpose || '予約'}`}
-                      {action.action === 'calendar.create' && `カレンダー: ${action.title}`}
-                      {action.action === 'message.send' && `メッセージ: ${action.to}へ`}
-                      {action.action === 'reminder.create' && `リマインダー: ${action.note}`}
+                    <p className="text-gray-900">
+                      {action.action === 'call.place' && `${(action as any).purpose || '予約'}`}
+                      {action.action === 'calendar.create' && `${action.title}`}
+                      {action.action === 'message.send' && `${action.to}へメッセージ`}
+                      {action.action === 'reminder.create' && `${action.note}`}
                     </p>
                   </div>
                 </div>
@@ -298,24 +266,21 @@ export default function Home() {
               <button
                 onClick={handleConfirmCall}
                 disabled={isExecuting}
-                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-2xl font-medium text-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
-                {isExecuting ? '実行中...' : '電話して予約'}
+                {isExecuting ? '...' : '実行'}
               </button>
               <button
                 onClick={() => setCurrentPlan(null)}
                 disabled={isExecuting}
-                className="px-6 py-3 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:cursor-not-allowed transition-colors"
+                className="px-8 py-4 rounded-2xl font-medium text-gray-700 hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed transition-colors"
               >
-                キャンセル
+                ✕
               </button>
             </div>
           </div>
         )}
-        
-        <MBMeter minutesBack={minutesBackToday} />
       </div>
-      <Footer />
       
       {/* Value Receipt - 軽量トースト */}
       <ValueReceipt
