@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Intent スキーマ定義
 export const ActionSchema = z.object({
-  action: z.enum(['calendar.create', 'message.send', 'reminder.create']),
+  action: z.enum(['calendar.create', 'message.send', 'reminder.create', 'call.place']),
   title: z.string().optional(),
   start: z.string().optional(), // ISO 8601 datetime
   duration_min: z.number().optional(),
@@ -10,6 +10,10 @@ export const ActionSchema = z.object({
   text: z.string().optional(), // メッセージ内容
   time: z.string().optional(), // リマインダー時刻
   note: z.string().optional(), // リマインダー内容
+  // call.place specific fields
+  phone: z.string().optional(), // 電話番号
+  purpose: z.string().optional(), // 目的
+  details: z.any().optional(), // 詳細情報
 });
 
 export const IntentSchema = z.object({

@@ -121,7 +121,7 @@ export default function InputBar({ onInput, isLoading }: InputBarProps) {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={isVoiceMode ? '音声入力中...' : '明日朝30分ランニング'}
+            placeholder={isVoiceMode ? '音声入力中...' : '明日の午前中で◯◯クリニック予約して'}
             className="input-bar resize-none h-20"
             disabled={isLoading || isVoiceMode}
           />
@@ -149,7 +149,7 @@ export default function InputBar({ onInput, isLoading }: InputBarProps) {
           disabled={!text.trim() || isLoading || isVoiceMode}
           className="w-full confirm-button"
         >
-          {isLoading ? '提案生成中...' : '2つの提案を取得'}
+          {isLoading ? 'AI分析中...' : '2つのプランを取得'}
         </button>
       </form>
     </div>

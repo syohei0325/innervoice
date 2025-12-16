@@ -3,7 +3,9 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
-import { ProposeRequestSchema, validateEnvironment, checkRateLimit, createErrorResponse } from '@/lib/validation';
+import { ProposeRequestSchema, validateEnvironment, checkRateLimit } from '@/lib/validation';
+import { detectIntent, getIntentDescription } from '@/lib/intent-detector';
+import { generatePlans } from '@/lib/plan-generator';
 
 // OpenAIクライアントは遅延初期化
 let openai: OpenAI;
@@ -52,92 +54,79 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate proposals using OpenAI
-    const systemPrompt = `あなたは"時間を返す"アシスタント。ユーザーの入力から2つの実行可能な提案を生成します。
-出力は必ずJSON形式で、proposals配列に2つの提案を含めてください。
-各提案には以下を含める：
-- id: ユニークID
-- title: 簡潔なタイトル（20文字以内）
-- slot: 開始時刻（HH:MM形式）
-- duration_min: 所要時間（分）
+    // ステップ1: 意図検出
+    const intent = await detectIntent(text, openai);
+    console.log('[/api/propose] Detected intent:', intent);
 
-コンテキスト: ${JSON.stringify(context)}`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text }
-      ],
-      temperature: 0.3,
-      max_tokens: 300,
-    });
-
-    const responseText = completion.choices[0]?.message?.content;
-    if (!responseText) {
-      throw new Error('No response from OpenAI');
-    }
-
-    let parsedResponse;
-    try {
-      parsedResponse = JSON.parse(responseText);
-    } catch {
-      // Fallback proposals if JSON parsing fails
-      parsedResponse = {
-        proposals: [
-          {
-            id: uuidv4(),
-            title: "提案A（15分）",
-            slot: "09:00",
-            duration_min: 15
-          },
-          {
-            id: uuidv4(),
-            title: "提案B（30分）", 
-            slot: "14:00",
-            duration_min: 30
-          }
-        ]
-      };
-    }
-
-    // Ensure proposals have required fields
-    const proposals = parsedResponse.proposals?.map((p: any) => ({
-      id: p.id || uuidv4(),
-      title: p.title || 'タスク',
-      slot: p.slot || '09:00',
-      duration_min: p.duration_min || 15
-    })) || [];
+    // ステップ2: PlanA/B生成
+    const plans = await generatePlans(
+      {
+        intent,
+        userInput: text,
+        timezone: context?.tz || 'Asia/Tokyo',
+        constraints: {
+          ngTimes: context?.ng,
+          mobility: context?.mobility,
+        },
+      },
+      openai
+    );
 
     const latency = Date.now() - startTime;
 
     return NextResponse.json({
-      proposals: proposals.slice(0, 2), // Ensure only 2 proposals
-      latency_ms: latency
+      intent: {
+        type: intent.type,
+        description: getIntentDescription(intent.type),
+        requiresCall: intent.requiresCall,
+        confidence: intent.confidence,
+      },
+      plans,
+      latency_ms: latency,
     });
   } catch (error) {
     console.error('Error in /api/propose:', error);
     
-    // Fallback proposals
-    const proposals = [
+    // フォールバック: シンプルなプラン
+    const fallbackPlans = [
       {
-        id: uuidv4(),
-        title: "提案A（15分）",
-        slot: "09:00", 
-        duration_min: 15
+        id: `plan_${Date.now()}_a`,
+        summary: '予定A（30分）',
+        actions: [
+          {
+            action: 'calendar.create',
+            title: '予定',
+            start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            duration_min: 30,
+          },
+        ],
+        reasons: [],
       },
       {
-        id: uuidv4(),
-        title: "提案B（30分）",
-        slot: "14:00",
-        duration_min: 30
-      }
+        id: `plan_${Date.now()}_b`,
+        summary: '予定B（15分・短縮版）',
+        actions: [
+          {
+            action: 'calendar.create',
+            title: '予定（短縮版）',
+            start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            duration_min: 15,
+          },
+        ],
+        reasons: [],
+      },
     ];
 
     return NextResponse.json({
-      proposals,
+      intent: {
+        type: 'simple_calendar',
+        description: 'カレンダー予定',
+        requiresCall: false,
+        confidence: 0.5,
+      },
+      plans: fallbackPlans,
       latency_ms: Date.now() - startTime,
-      fallback: true
+      fallback: true,
     });
   }
 }

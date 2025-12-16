@@ -283,7 +283,9 @@ model Plan {
 
 model Execution {
   id          String   @id @default(cuid())
+  userId      String   @map("user_id")
   planId      String   @map("plan_id")
+  action      String   // calendar.create, message.send, reminder.create, call.place
   status      String   @default("pending")
   resultsJson String?  @map("results_json")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -291,6 +293,7 @@ model Execution {
   plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId, createdAt])
+  @@index([userId, action, createdAt])
   @@map("executions")
 }
 
@@ -306,6 +309,19 @@ model Connector {
 
   @@unique([userId, provider])
   @@map("connectors")
+}
+
+model Blacklist {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  phone     String   // 電話番号
+  type      String   @default("phone") // phone|domain|keyword
+  reason    String?  // ブロック理由
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, phone])
+  @@index([userId, type])
+  @@map("blacklists")
 }
 
 // Doraemon Mode: Memory OS

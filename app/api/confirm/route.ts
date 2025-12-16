@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import { supplyChainTracker } from '@/lib/supply-chain';
 import { generateExecutionReceipt } from '@/lib/poex';
+import { getCallProvider } from '@/lib/call-provider';
+import { validateCallRequest, addCallEthicsPrefix } from '@/lib/call-rules';
+import { Plan, Action } from '@/lib/intent';
 import crypto from 'crypto';
 
 // Proposal型定義（page.tsxと一致）
@@ -25,17 +28,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[CONFIRM] Body received:', JSON.stringify(body));
     
-    const { proposal_id, plan_id, enabled_actions, approve_id, idempotency_key } = body;
+    const { proposal_id, plan_id, plan, enabled_actions, approve_id, idempotency_key } = body;
     
-    if (!proposal_id && !plan_id) {
+    if (!proposal_id && !plan_id && !plan) {
       return NextResponse.json(
-        { error: 'Either proposal_id or plan_id is required' },
+        { error: 'Either proposal_id, plan_id, or plan is required' },
         { status: 400 }
       );
     }
 
     const mockUserId = 'user_mock_001';
     const eventId = uuidv4();
+    
+    // Plan情報を取得
+    const executionPlan: Plan | null = plan || null;
 
     // ConfirmOS: approve_id validation (optional for MVP, required for MVP+)
     if (approve_id) {
@@ -117,8 +123,75 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // アクション実行
+    const executionResults: Array<{ action: string; status: string; id?: string; error?: string; summary?: string }> = [];
+    let callSummary: string | null = null;
+    let appointmentTime: string | null = null;
+    
+    if (executionPlan && executionPlan.actions) {
+      console.log('[CONFIRM] Executing actions:', executionPlan.actions);
+      
+      for (const action of executionPlan.actions) {
+        if (action.action === 'call.place') {
+          // 電話代行の実行
+          console.log('[CONFIRM] Executing call.place:', action);
+          
+          // Call Rules検証
+          const validation = await validateCallRequest(
+            mockUserId,
+            (action as any).phone || '',
+            (action as any).purpose || ''
+          );
+          
+          if (!validation.allowed) {
+            executionResults.push({
+              action: 'call.place',
+              status: 'error',
+              error: validation.reason,
+            });
+            continue;
+          }
+          
+          // 電話実行
+          try {
+            const callProvider = getCallProvider();
+            const ethicsPrefix = addCallEthicsPrefix((action as any).purpose || '予約');
+            
+            const callResult = await callProvider.placeCall({
+              phone: (action as any).phone || '',
+              purpose: (action as any).purpose || '',
+              details: (action as any).details || {},
+              ethicsPrefix,
+            });
+            
+            callSummary = callResult.summary;
+            appointmentTime = callResult.appointmentTime || null;
+            
+            executionResults.push({
+              action: 'call.place',
+              status: callResult.status === 'success' ? 'ok' : 'error',
+              id: eventId,
+              summary: callResult.summary,
+            });
+            
+            // 通話成功時、予約時間を取得
+            if (callResult.appointmentTime && proposal) {
+              proposal.slot = callResult.appointmentTime;
+            }
+          } catch (callError) {
+            console.error('[CONFIRM] Call failed:', callError);
+            executionResults.push({
+              action: 'call.place',
+              status: 'error',
+              error: callError instanceof Error ? callError.message : 'Call failed',
+            });
+          }
+        }
+      }
+    }
+    
     // .ics生成
-    const icsContent = generateIcsContent(eventId, proposal);
+    const icsContent = generateIcsContent(eventId, proposal, appointmentTime);
     
     // データベース保存を試みる（失敗しても続行）
     try {
@@ -192,15 +265,27 @@ export async function POST(request: NextRequest) {
       });
 
       // Record FEA (Friction Events Avoided)
-      await prisma.frictionEvent.create({
-        data: {
-          userId: mockUserId,
-          type: 'app_switch_avoided',
-          qty: 1,
-          evidence: 'measured',
-          action: eventId,
-        },
-      });
+      const feaEvents = [
+        { type: 'app_switch_avoided', qty: 1 },
+      ];
+      
+      // 電話が成功した場合、追加のFEAを記録
+      if (executionResults.some(r => r.action === 'call.place' && r.status === 'ok')) {
+        feaEvents.push({ type: 'call_made_for_you', qty: 1 });
+        feaEvents.push({ type: 'waiting_time_avoided', qty: 1 });
+      }
+      
+      for (const fea of feaEvents) {
+        await prisma.frictionEvent.create({
+          data: {
+            userId: mockUserId,
+            type: fea.type,
+            qty: fea.qty,
+            evidence: 'measured',
+            action: eventId,
+          },
+        });
+      }
       
       // Supply-Chain Tracking
       const action = { action: 'calendar.create', title: proposal?.title };
@@ -228,20 +313,31 @@ export async function POST(request: NextRequest) {
       device_sig: null, // TODO: 将来、端末署名を実装
     });
 
+    // FEAを計算
+    const feaEvents = [
+      { type: 'app_switch_avoided', qty: 1, evidence: 'measured' },
+    ];
+    
+    if (executionResults.some(r => r.action === 'call.place' && r.status === 'ok')) {
+      feaEvents.push({ type: 'call_made_for_you', qty: 1, evidence: 'measured' });
+      feaEvents.push({ type: 'waiting_time_avoided', qty: 1, evidence: 'measured' });
+    }
+    
     const response = {
       success: true,
       ics_url: `/api/download/${eventId}`,
       ics_content: icsContent, // クライアント側で直接ダウンロードできるように
       minutes_back: proposal?.duration_min || 15,
-      execution_status: 'success',
+      execution_status: executionResults.some(r => r.status === 'error') ? 'partial' : 'success',
       event_id: eventId,
       // ConfirmOS fields
       approve_id: approve_id || null,
       idempotency_key: idempotency_key || null,
+      // Execution results
+      execution_results: executionResults,
+      call_summary: callSummary,
       // FEA (Friction Events Avoided)
-      friction_saved: [
-        { type: 'app_switch_avoided', qty: 1, evidence: 'measured' },
-      ],
+      friction_saved: feaEvents,
       // PoEx: Execution Receipt
       exec_receipts: [executionReceipt],
     };
@@ -261,7 +357,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function generateIcsContent(eventId: string, proposal: Proposal | null): string {
+function generateIcsContent(eventId: string, proposal: Proposal | null, appointmentTime: string | null = null): string {
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);

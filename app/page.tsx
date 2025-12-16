@@ -19,6 +19,8 @@ export type Proposal = {
 
 export default function Home() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [intentInfo, setIntentInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [minutesBackToday, setMinutesBackToday] = useState(0);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
@@ -31,6 +33,10 @@ export default function Home() {
 
   const handleInput = async (text: string) => {
     setIsLoading(true);
+    setProposals([]);
+    setPlans([]);
+    setIntentInfo(null);
+    
     try {
       const response = await fetch('/api/propose', {
         method: 'POST',
@@ -50,11 +56,28 @@ export default function Home() {
       }
       
       const data = await response.json();
+      console.log('[Home] Received data:', data);
       
-      if (data.proposals && data.proposals.length > 0) {
+      // 新しいAPI形式（intent + plans）
+      if (data.intent && data.plans) {
+        setIntentInfo(data.intent);
+        setPlans(data.plans);
+        
+        // 後方互換性のため、proposalsも生成
+        const legacyProposals = data.plans.map((plan: Plan) => ({
+          id: plan.id,
+          title: plan.summary,
+          slot: '09:00', // デフォルト値
+          duration_min: 30,
+        }));
+        setProposals(legacyProposals);
+      } 
+      // 古いAPI形式（proposals）
+      else if (data.proposals && data.proposals.length > 0) {
         setProposals(data.proposals);
-      } else {
-        // Fallback proposals
+      } 
+      // フォールバック
+      else {
         setProposals([
           {
             id: 'fallback-1',
@@ -99,6 +122,15 @@ export default function Home() {
   };
 
   const handleProposalClick = async (proposalId: string) => {
+    // 新しいAPI形式: plansが既にある場合
+    if (plans.length > 0) {
+      const plan = plans.find(p => p.id === proposalId);
+      if (plan) {
+        setSelectedPlan(plan);
+        return;
+      }
+    }
+    
     // MVP+: Generate plans from proposal
     try {
       const response = await fetch('/api/plan', {
@@ -187,11 +219,15 @@ export default function Home() {
   const handlePlanConfirm = async (planId: string, enabledActions: string[]) => {
     setIsExecuting(true);
     try {
+      // Planを取得
+      const plan = plans.find(p => p.id === planId) || selectedPlan;
+      
       const response = await fetch('/api/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           plan_id: planId,
+          plan: plan, // Planデータも送信
           enabled_actions: enabledActions 
         }),
       });
@@ -199,6 +235,11 @@ export default function Home() {
       if (!response.ok) throw new Error('Failed to execute plan');
       
       const data = await response.json();
+      
+      // 通話結果を表示
+      if (data.call_summary) {
+        alert(`📞 通話完了\n\n${data.call_summary}`);
+      }
       
       // Update minutes back
       if (data.minutes_back) {
