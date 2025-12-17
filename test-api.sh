@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # Action Cloud API テスト
-set -e
 
 echo "🚀 Action Cloud API Test"
 echo "========================"

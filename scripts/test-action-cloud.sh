@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # Action Cloud API テストスクリプト
 # Usage: ./scripts/test-action-cloud.sh
-
-set -e
 
 BASE_URL="http://localhost:3000"
 TENANT_ID="tenant_demo_001"
