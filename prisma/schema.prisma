@@ -1,4 +1,4 @@
-// This is your Prisma schema file,
+// Yohaku Action Cloud - Phase1 Schema (Exit-first)
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -11,127 +11,159 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =========================================
+// Phase1 Core Tables (本番)
+// =========================================
+
+// Tenants - 組織単位
+model Tenant {
+  id           String    @id @default(cuid())
+  name         String
+  region       String    @default("JP") // JP|US|EU
+  status       String    @default("active") // active|frozen
+  frozenReason String?   @map("frozen_reason")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  users             User[]
+  apiKeys           ApiKey[]
+  proposals         Proposal[]
+  plans             Plan[]
+  approvals         Approval[]
+  auditLogs         AuditLog[]
+  ledgerEvents      LedgerEvent[]
+  freezeRules       FreezeRule[]
+  connectorConfigs  ConnectorConfig[]
+  webhookJobs       WebhookJob[]
+  receipts          Receipt[]
+  growthEvents      GrowthEvent[]
+  billingContracts  BillingContract[]
+  usageCounters     UsageCounterDaily[]
+  invoices          Invoice[]
+
+  @@map("tenants")
+}
+
+// Users - テナント内のユーザー
 model User {
   id         String   @id @default(cuid())
-  emailHash  String   @unique @map("email_hash")
+  tenantId   String   @map("tenant_id")
+  emailHash  String   @map("email_hash")
+  role       String   @default("member") // admin|member|viewer
   createdAt  DateTime @default(now()) @map("created_at")
 
-  profile          Profile?
-  proposals        Proposal[]
-  decisions        Decision[]
-  events           Event[]
-  deletionRequests DeletionRequest[]
-  intents          Intent[]
-  plans            Plan[]
-  connectors       Connector[]
-  memories         Memory[]
-  observations     Observation[]
-  nudges           Nudge[]
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  proposals Proposal[]
+  plans     Plan[]
+  approvals Approval[]
+  auditLogs AuditLog[]
 
+  @@unique([tenantId, emailHash])
+  @@index([tenantId, createdAt])
   @@map("users")
 }
 
-model Profile {
-  id              String   @id @default(cuid())
-  userId          String   @unique @map("user_id")
-  tz              String   @default("Asia/Tokyo")
-  displayName     String?  @map("display_name")
-  commuteMinutes  Int?     @map("commute_minutes")
-  sleepWindow     String?  @map("sleep_window")
-  ngHoursJson     String?  @map("ng_hours_json")
-  mobilityPref    String?  @map("mobility_pref")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("profiles")
-}
-
-// PDV (Personal Data Vault) - 端末優先で同期
-model Pdv {
-  userId    String   @id @map("user_id")
-  kvJson    String   @map("kv_json") // JSON key-value store
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("pdv")
-}
-
-// Savings - Money-Back tracking
-model Saving {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  amountYen Int      @map("amount_yen")
-  category  String   // subscription_cancel|price_negotiation|coupon|cashback
-  source    String   // plan_id or action_id
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([userId, createdAt])
-  @@map("savings")
-}
-
-// Consents - Partner/用途別同意
-model Consent {
+// API Keys - テナント単位の認証
+model ApiKey {
   id         String    @id @default(cuid())
-  userId     String    @map("user_id")
-  scopeJson  String    @map("scope_json") // { "partner": "...", "scopes": ["location", "calendar"] }
-  expiresAt  DateTime? @map("expires_at")
+  tenantId   String    @map("tenant_id")
+  name       String
+  keyHash    String    @unique @map("key_hash")
+  scopesJson String    @map("scopes_json") // ["plan:write", "approve:write", "confirm:write", "ledger:read", "billing:read"]
   createdAt  DateTime  @default(now()) @map("created_at")
   revokedAt  DateTime? @map("revoked_at")
 
-  @@index([userId, createdAt])
-  @@map("consents")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("api_keys")
 }
 
-// Docs - 生成書類
-model Doc {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  type       String   // pdf|docx|ics|csv
-  storageUri String   @map("storage_uri")
-  hash       String   // SHA-256 for integrity
-  createdAt  DateTime @default(now()) @map("created_at")
+// Proposals - 提案（複数プラン）
+model Proposal {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  userId      String   @map("user_id")
+  payloadJson String   @map("payload_json")
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  @@index([userId, createdAt])
-  @@map("docs")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plans  Plan[]
+
+  @@index([tenantId, createdAt])
+  @@map("proposals")
 }
 
-// Approvals - ConfirmOS
+// Plans - 実行プラン
+model Plan {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  userId      String   @map("user_id")
+  proposalId  String?  @map("proposal_id")
+  payloadJson String   @map("payload_json") // { "actions": [...], "confirm_sheet": {...} }
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposal     Proposal?     @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  approvals    Approval[]
+  ledgerEvents LedgerEvent[]
+  receipts     Receipt[]
+
+  @@index([tenantId, createdAt])
+  @@map("plans")
+}
+
+// Approvals - 承認（TTL10分）
 model Approval {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  approveId  String   @unique @map("approve_id") // aprv_xxx
-  planId     String?  @map("plan_id")
-  scopeJson  String   @map("scope_json") // { "actions": [...], "risk_level": "low|medium|high" }
-  expiresAt  DateTime @map("expires_at") // 10分後
-  createdAt  DateTime @default(now()) @map("created_at")
+  id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
+  userId     String    @map("user_id")
+  approveId  String    @unique @map("approve_id") // aprv_xxx
+  planId     String?   @map("plan_id")
+  scopeJson  String    @map("scope_json") // { "actions": [...], "risk_level": "low|medium|high" }
+  expiresAt  DateTime  @map("expires_at") // 10分後
+  createdAt  DateTime  @default(now()) @map("created_at")
   usedAt     DateTime? @map("used_at")
 
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          Plan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  auditLogs     AuditLog[]
+  ledgerEvents  LedgerEvent[]
+
   @@index([approveId])
-  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
   @@map("approvals")
 }
 
-// Audit Logs - 監査
+// Audit Logs - 監査ログ
 model AuditLog {
   id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
   userId      String   @map("user_id")
   approveId   String?  @map("approve_id")
-  action      String   // approve|confirm|cancel|rollback
+  action      String   // approve|confirm|cancel|rollback|freeze|unfreeze
   payloadJson String   @map("payload_json")
   at          DateTime @default(now())
 
-  @@index([userId, at])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approval Approval? @relation(fields: [approveId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, at])
   @@index([approveId])
   @@map("audit_logs")
 }
 
-// Execution Ledger - 台帳（改ざん検知対応）
+// Execution Ledger - 台帳（append-only chain）
 model LedgerEvent {
   id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
   approveId    String?   @map("approve_id")
   planId       String?   @map("plan_id")
-  action       String    // calendar.create|message.send|call.place等
+  action       String    // webhook.dispatch|calendar.hold.create
   actor        String    // user|automation
   status       String    // approved|executed|failed|rolled_back
   beforeJson   String?   @map("before_json")
@@ -141,277 +173,278 @@ model LedgerEvent {
   ts           DateTime  @default(now())
   prevHash     String?   @map("prev_hash") // 改ざん検知用ハッシュチェーン
 
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  approval Approval? @relation(fields: [approveId], references: [id], onDelete: SetNull)
+  plan     Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, ts])
   @@index([approveId, ts])
   @@index([planId, ts])
   @@map("ledger_events")
 }
 
-// Vibe Profiles - パーソナライゼーション
-model VibeProfile {
-  userId            String   @id @map("user_id")
-  tone              String   @default("friendly") // friendly|coach|concise|warm
-  decisiveness      String   @default("balanced") // quick|balanced|cautious
-  frugality         String   @default("mid") // low|mid|high
-  notificationStyle String   @default("push") // push|silent|scheduled
-  language          String   @default("ja-JP")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+// Freeze Rules - Kill/Freeze
+model FreezeRule {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  level         String    // global|tenant|connector|target
+  connector     String?   // webhook|calendar_hold
+  targetUrlHash String?   @map("target_url_hash")
+  active        Boolean   @default(true)
+  reason        String
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  @@map("vibe_profiles")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, active])
+  @@index([level, active])
+  @@map("freeze_rules")
 }
 
-// Reason Feedbacks - Why-this フィードバック
-model ReasonFeedback {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  planId    String   @map("plan_id")
-  reasonKey String   @map("reason_key")
-  voteBool  Boolean  @map("vote_bool") // true=👍, false=👎
-  tag       String?  // too_expensive|too_far|too_crowded等
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([userId, createdAt])
-  @@map("reason_feedbacks")
-}
-
-// Personalization Stats - 個人化統計
-model PersonalizationStat {
-  userId          String   @id @map("user_id")
-  date            DateTime @db.Date
-  top1Rate        Float?   @map("top1_rate")
-  editDistancePct Float?   @map("edit_distance_pct")
-  ttcP50Ms        Int?     @map("ttc_p50_ms")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  @@unique([userId, date])
-  @@map("personalization_stats")
-}
-
-// Friction Events - FEA集計用
-model FrictionEvent {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  type      String   // copy_paste_avoided|app_switch_avoided|typing_avoided_chars|search_avoided|form_fill_avoided|call_tree_avoided
-  qty       Int      // 件数 or 文字数
-  evidence  String   // measured|inferred|baseline
-  action    String?  // 関連アクション
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([userId, createdAt])
-  @@map("friction_events")
-}
-
-model Proposal {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  payloadJson String   @map("payload_json")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  decisions Decision[]
-
-  @@map("proposals")
-}
-
-model Decision {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  proposalId  String   @map("proposal_id")
-  icsBlob     String   @map("ics_blob")
-  minutesBack Int      @map("minutes_back")
-  decidedAt   DateTime @default(now()) @map("decided_at")
-
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-
-  @@index([userId, decidedAt])
-  @@map("decisions")
-}
-
-model Event {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  source      String
-  minutesBack Int?     @map("minutes_back")
-  metaJson    String?  @map("meta_json")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("events")
-}
-
-model DeletionRequest {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  status      String   @default("pending")
-  requestedAt DateTime @default(now()) @map("requested_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("deletion_requests")
-}
-
-// MVP+ テーブル追加
-model Intent {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  text      String
-  json      String   @map("json")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plans Plan[]
-
-  @@map("intents")
-}
-
-model Plan {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  intentId    String   @map("intent_id")
-  actionsJson String   @map("actions_json")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  intent     Intent      @relation(fields: [intentId], references: [id], onDelete: Cascade)
-  executions Execution[]
-
-  @@index([userId, createdAt])
-  @@map("plans")
-}
-
-model Execution {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  planId      String   @map("plan_id")
-  action      String   // calendar.create, message.send, reminder.create, call.place
-  status      String   @default("pending")
-  resultsJson String?  @map("results_json")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  @@index([planId, createdAt])
-  @@index([userId, action, createdAt])
-  @@map("executions")
-}
-
-model Connector {
+// Connector Configs - コネクタ設定
+model ConnectorConfig {
   id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  provider   String
-  enabled    Boolean  @default(true)
-  scopesJson String?  @map("scopes_json")
+  tenantId   String   @map("tenant_id")
+  connector  String   // webhook|calendar_hold
+  configJson String   @map("config_json")
   createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, provider])
-  @@map("connectors")
+  @@unique([tenantId, connector])
+  @@map("connector_configs")
 }
 
-model Blacklist {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  phone     String   // 電話番号
-  type      String   @default("phone") // phone|domain|keyword
-  reason    String?  // ブロック理由
-  createdAt DateTime @default(now()) @map("created_at")
+// Webhook Jobs - Webhook配信ジョブ
+model WebhookJob {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  jobId         String    @unique @map("job_id")
+  targetUrlHash String    @map("target_url_hash")
+  payloadJson   String    @map("payload_json")
+  signature     String
+  status        String    @default("queued") // queued|delivering|succeeded|failed
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  @@unique([userId, phone])
-  @@index([userId, type])
-  @@map("blacklists")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([nextAttemptAt])
+  @@map("webhook_jobs")
 }
 
-// Doraemon Mode: Memory OS
+// Receipts - 実行レシート
+model Receipt {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  planId      String   @map("plan_id")
+  status      String   // success|partial|failed
+  summaryText String   @map("summary_text")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan         Plan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+  receiptLinks ReceiptLink[]
+
+  @@index([tenantId, createdAt])
+  @@map("receipts")
+}
+
+// Receipt Links - レシート共有リンク（Team Viral）
+model ReceiptLink {
+  id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
+  receiptId  String    @map("receipt_id")
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("receipt_links")
+}
+
+// Growth Events - PLG計測
+model GrowthEvent {
+  id       String   @id @default(cuid())
+  tenantId String   @map("tenant_id")
+  type     String   // approve_link_opened|receipt_shared|template_exported|template_imported
+  metaJson String   @map("meta_json")
+  at       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, at])
+  @@map("growth_events")
+}
+
+// =========================================
+// Billing（phase1：メータリング必須 / 請求は手動でもOK）
+// =========================================
+
+// Billing Contracts - 契約プラン
+model BillingContract {
+  id                          String    @id @default(cuid())
+  tenantId                    String    @map("tenant_id")
+  plan                        String    // design_partner|private_beta_starter|private_beta_pro
+  currency                    String    @default("JPY")
+  platformFeeJpy              Int       @map("platform_fee_jpy")
+  includedConfirms            Int       @map("included_confirms")
+  includedWebhookJobs         Int       @map("included_webhook_jobs")
+  includedCalendarHolds       Int       @map("included_calendar_holds")
+  overageConfirmJpy           Float     @map("overage_confirm_jpy")
+  overageWebhookJobJpy        Float     @map("overage_webhook_job_jpy")
+  overageCalendarHoldJpy      Float     @map("overage_calendar_hold_jpy")
+  effectiveFrom               DateTime  @map("effective_from")
+  effectiveTo                 DateTime? @map("effective_to")
+  createdAt                   DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, effectiveFrom])
+  @@map("billing_contracts")
+}
+
+// Usage Counters Daily - 日次使用量
+model UsageCounterDaily {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  day            DateTime @db.Date
+  confirms       Int      @default(0)
+  webhookJobs    Int      @default(0) @map("webhook_jobs")
+  calendarHolds  Int      @default(0) @map("calendar_holds")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, day])
+  @@index([tenantId, day])
+  @@map("usage_counters_daily")
+}
+
+// Invoices - 請求書
+model Invoice {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  month          String    // YYYY-MM
+  platformFeeJpy Int       @map("platform_fee_jpy")
+  overageFeeJpy  Int       @map("overage_fee_jpy")
+  creditsJpy     Int       @default(0) @map("credits_jpy") // Treaty補償
+  totalJpy       Int       @map("total_jpy")
+  status         String    @default("draft") // draft|issued|paid
+  issuedAt       DateTime? @map("issued_at")
+  paidAt         DateTime? @map("paid_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, month])
+  @@index([tenantId, status])
+  @@map("invoices")
+}
+
+// =========================================
+// SEALED（phase1はテーブルだけ / 実行パスは禁止）
+// =========================================
+
+// Call Jobs - Phone connector用（phase1実行禁止）
+model CallJob {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  jobId       String    @unique @map("job_id")
+  phoneNumber String    @map("phone_number")
+  purpose     String
+  status      String    @default("queued") // queued|calling|completed|failed
+  transcript  String?
+  summary     String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@map("call_jobs")
+}
+
+// Memories - Memory OS（phase1は最小ログのみ）
 model Memory {
   id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
   userId     String    @map("user_id")
-  kind       String    // preference|fact|alias|goal|routine|relationship_note|autopilot_rule
+  kind       String    // preference|fact|alias|goal|routine
   key        String
   valueJson  String    @map("value_json")
-  source     String?   // utterance|action|calendar|message_meta|import|manual
+  source     String?   // utterance|action|import|manual
   confidence Float?    @default(1.0)
   expiresAt  DateTime? @map("expires_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, key])
-  @@index([userId, key])
+  @@unique([tenantId, userId, key])
+  @@index([tenantId, userId, key])
   @@map("memories")
 }
 
-// Doraemon Mode: Proactive OS - Observations
+// Observations - Proactive OS（phase1は実行禁止）
 model Observation {
   id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
   userId      String   @map("user_id")
-  signal      String   // free_slot|relationship_gap|deadline_near|habit_window|location|open_loop
+  signal      String   // free_slot|relationship_gap|deadline_near
   payloadJson String   @map("payload_json")
   observedAt  DateTime @default(now()) @map("observed_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, observedAt])
+  @@index([tenantId, userId, observedAt])
   @@map("observations")
 }
 
-// Doraemon Mode: Proactive OS - Nudges
+// Nudges - Proactive OS（phase1は実行禁止）
 model Nudge {
   id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
   userId     String    @map("user_id")
   summary    String
   planJson   String    @map("plan_json")
   reasonKeys String[]  @map("reason_keys")
-  status     String    @default("shown") // shown|accepted|dismissed|snoozed|expired
+  status     String    @default("shown") // shown|accepted|dismissed|expired
   createdAt  DateTime  @default(now()) @map("created_at")
   resolvedAt DateTime? @map("resolved_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
+  @@index([tenantId, userId, createdAt])
   @@map("nudges")
 }
 
-// Doraemon Mode: Relationship Graph
+// Contact Graph - Relationship Graph（phase1は実行禁止）
 model ContactGraph {
-  userId      String    @map("user_id")
-  contactId   String    @map("contact_id")
-  tieStrength Float?    @map("tie_strength")
-  lastMetAt   DateTime? @map("last_met_at")
-  lastMsgAt   DateTime? @map("last_msg_at")
-  cadenceDays Int?      @map("cadence_days")
-  channelsJson String?  @map("channels_json")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  tenantId     String    @map("tenant_id")
+  userId       String    @map("user_id")
+  contactId    String    @map("contact_id")
+  tieStrength  Float?    @map("tie_strength")
+  lastMetAt    DateTime? @map("last_met_at")
+  lastMsgAt    DateTime? @map("last_msg_at")
+  cadenceDays  Int?      @map("cadence_days")
+  channelsJson String?   @map("channels_json")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  @@id([userId, contactId])
-  @@index([userId, updatedAt])
+  @@id([tenantId, userId, contactId])
+  @@index([tenantId, userId, updatedAt])
   @@map("contact_graph")
 }
 
-// Doraemon Mode: Availability
-model Availability {
-  userId     String   @map("user_id")
-  date       DateTime @db.Date
-  slotsJson  String   @map("slots_json")
-  source     String?  // calendar|manual
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  @@id([userId, date])
-  @@map("availability")
-}
-
-// Pluggable Memory: Provider Events
-model ProviderEvent {
+// Marketplace Listings - Connector SDK（phase3）
+model MarketplaceListing {
   id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  provider    String   // supermemory|zep|mem0
-  event       String   // search|health|error
-  payloadJson String   @map("payload_json")
-  at          DateTime @default(now())
+  connectorId String   @unique @map("connector_id")
+  name        String
+  description String
+  status      String   @default("draft") // draft|published|archived
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  @@index([userId, at])
-  @@map("provider_events")
+  @@map("marketplace_listings")
 }
