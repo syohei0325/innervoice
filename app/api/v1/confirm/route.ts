@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import { guardAction, PhaseGuardError, CURRENT_PHASE } from '@/lib/phase-guard';
+import { validateWebhookUrl, hashWebhookUrl } from '@/lib/webhook-validator';
 import crypto from 'crypto';
 
 /**
@@ -147,10 +148,59 @@ export async function POST(request: NextRequest) {
 
         if (action.action === 'webhook.dispatch') {
           // Webhook実行（phase1の主戦場）
-          const jobId = `job_${uuidv4()}`;
-          const targetUrlHash = crypto.createHash('sha256').update(action.target_url || '').digest('hex');
+          const targetUrl = action.target_url || action.connector_id;
+          
+          if (!targetUrl) {
+            results.push({
+              action: 'webhook.dispatch',
+              status: 'error',
+              error: 'target_url or connector_id is required',
+            });
+            continue;
+          }
 
-          // Webhook Job作成（outbox pattern）
+          // 1. URL形式チェック（SSRF対策）
+          const urlValidation = validateWebhookUrl(targetUrl);
+          if (!urlValidation.valid) {
+            results.push({
+              action: 'webhook.dispatch',
+              status: 'error',
+              error: `Invalid webhook URL: ${urlValidation.reason}`,
+            });
+            continue;
+          }
+
+          // 2. 登録済みかチェック（事前登録制）
+          const targetUrlHash = hashWebhookUrl(targetUrl);
+          const connectorConfig = await prisma.connectorConfig.findFirst({
+            where: {
+              tenantId: approval.tenantId,
+              connector: 'webhook',
+            },
+          });
+
+          // connector_configsに登録されているか確認
+          let configJson: any = {};
+          if (connectorConfig) {
+            configJson = JSON.parse(connectorConfig.configJson);
+          }
+
+          const registeredUrls = configJson.registered_urls || [];
+          const isRegistered = registeredUrls.some((u: any) => 
+            hashWebhookUrl(u.url) === targetUrlHash && u.enabled !== false
+          );
+
+          if (!isRegistered) {
+            results.push({
+              action: 'webhook.dispatch',
+              status: 'error',
+              error: 'Webhook target URL is not registered. Please register it in connector_configs first.',
+            });
+            continue;
+          }
+
+          // 3. Webhook Job作成（outbox pattern）
+          const jobId = `job_${uuidv4()}`;
           await prisma.webhookJob.create({
             data: {
               tenantId: approval.tenantId,

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Action Cloud API テストスクリプト
 # Usage: ./scripts/test-action-cloud.sh
