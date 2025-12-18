@@ -31,3 +31,5 @@
 - Receiver Kitで導入が"短い"実証がある
 - 有料意志（LOI or paid pilot）を最低1社から取る
 
+
+

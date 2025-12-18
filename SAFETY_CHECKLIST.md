@@ -195,3 +195,5 @@ curl -X POST http://localhost:3000/api/v1/confirm \
 
 **すべて完了したら、安心して次（設計パートナー獲得）に進めます！** 🚀
 
+
+

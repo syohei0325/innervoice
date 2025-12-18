@@ -196,3 +196,5 @@ cat .env.local | grep YOHAKU_PHASE
 
 **すべて完了したら、設計パートナー獲得に進みましょう！** 🚀
 
+
+

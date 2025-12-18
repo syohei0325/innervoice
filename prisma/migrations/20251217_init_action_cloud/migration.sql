@@ -21,3 +21,5 @@ CREATE TABLE IF NOT EXISTS "tenants" (
 -- このマイグレーションは記録用
 -- 実際のテーブルは既に存在するため、エラーを避けるため IF NOT EXISTS を使用
 
+
+

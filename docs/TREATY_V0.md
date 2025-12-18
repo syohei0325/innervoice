@@ -78,3 +78,5 @@ WHERE created_at >= NOW() - INTERVAL '7 days';
 - Breaking change は major を上げる
 - 変更は30日前に通知
 
+
+
