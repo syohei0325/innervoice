@@ -8,13 +8,15 @@
 
 ## phase1の"確定"とは
 - 人間 or ポリシーが approve した内容だけを実行する
-- 実行結果を ledger と receipt に残す
+- 実行結果を ledger と receipt（PoEx）に残す
+- 実行主体（KYA：executor agent/api_key）と承認者（principal）を追跡できる
 - 失敗しても価値が落ちない（CalendarはICS fallback）
 - 危ないもの（不可逆）は Gate で止める（phase1は実行禁止）
 
 ## コネクタ（phase1固定）
 ### Connector A: Webhook（主戦場）
-- 顧客所有の endpoint へ HMAC署名付きで送る
+- 顧客所有の endpoint へ HMAC署名付きで送る（timestamp含む）
+- 事前登録制（connector_configs.registered_urls のみ送信）
 - 冪等キー + リトライ + 2h以内収束
 - 失敗しても ledger に理由が残り、再実行できる
 
@@ -26,13 +28,14 @@
 ## Must（機能要件）
 1) /plan → /approve → /confirm
 2) approve TTL10分 / confirm idempotency必須（24h）
-3) Execution Ledger（append-only chain）
+3) Execution Ledger（append-only chain + KYA）
 4) Undo 10秒（可逆アクションのみ）
 5) Partial success（1つ失敗でも全体はレシート化）
 6) Receipt（実行レシート）生成（Team Viral導線）
-7) Policy Engine（phase1は allowlist + freeze だけでOK）
+7) Policy Engine（phase1は allowlist + freeze + registered target だけでOK）
 8) Usage metering（課金のための計測：confirm/webhook_job/calendar_hold）
-9) Receiver Starter Kit（署名検証・冪等・ack例）を提供
+9) Receiver Starter Kit（署名検証・timestamp skew・冪等・ack例）を提供
+10) Provider Neutral / Planner resilience（mock/rules）でOpenAI無しでも検証可能
 
 ## 受け入れ基準（DoD）
 - approveなしconfirm不可（400_APPROVAL_REQUIRED）
@@ -43,9 +46,13 @@
 - CalendarHoldは必ずICS生成（常時フォールバック）
 - phase1 allowlist外コネクタは必ず 403
 - 署名検証がないWebhookは拒否（送らない/受けない）
+- timestamp skew のWebhookは拒否（T17）
+- webhook target は登録済みのみ（T18）
 - retry/backoffが仕様通りに動く（T10）
 - freezeが効く（T13）
 - meteringが二重に数えない（T14）
+- KYA: executor/principal が追跡可能（T15/T16）
+- Provider Neutral: mock/rulesでplanが返り、最小チェックが止まらない（T19）
 
 ## SEALED（phase1で実行禁止）
 以下の機能は設計/スタブのみで、実行パスは403/NotImplementedを返す：
@@ -324,6 +331,13 @@ FAIL_FAST_TRIGGERS={
 - ledger_integrity ≥ 99.9%
 - Receiver Kitで導入が"短い"実証がある
 - 有料意志（LOI or paid pilot）を最低1社から取る
+
+
+
+
+
+
+
 
 
 

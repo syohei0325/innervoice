@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import { guardAction, PhaseGuardError, CURRENT_PHASE } from '@/lib/phase-guard';
 import { validateWebhookUrl, hashWebhookUrl } from '@/lib/webhook-validator';
+import { signWebhook, getWebhookSigningSecret } from '@/lib/webhook-signer';
 import crypto from 'crypto';
 
 /**
@@ -27,6 +28,14 @@ export async function POST(request: NextRequest) {
     console.log('[CONFIRM] Body received:', JSON.stringify(body));
     
     const { plan_id, approve_id, idempotency_key } = body;
+    
+    // KYA (Know Your Agent) - ヘッダーから取得
+    const apiKeyId = request.headers.get('x-yohaku-api-key-id') || 'key_mock_001';
+    const agentId = request.headers.get('x-yohaku-agent-id');
+    const agentLabel = request.headers.get('x-yohaku-agent-label') || 'unknown-agent';
+    
+    // Agent IDをhash化（存在する場合）
+    const agentIdHash = agentId ? crypto.createHash('sha256').update(agentId).digest('hex') : null;
     
     // 必須パラメータチェック
     if (!plan_id) {
@@ -199,15 +208,30 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          // 3. Webhook Job作成（outbox pattern）
+          // 3. Webhook Job作成（outbox pattern + HMAC署名 + timestamp）
           const jobId = `job_${uuidv4()}`;
+          const webhookPayload = {
+            event: action.event || 'action.executed',
+            tenant_id: approval.tenantId,
+            confirm_id: idempotency_key,
+            kya: {
+              executor_api_key_id: apiKeyId,
+              executor_agent_label: agentLabel,
+            },
+            payload: action.body || {},
+          };
+          
+          const signingSecret = getWebhookSigningSecret();
+          const signatureResult = signWebhook(webhookPayload, jobId, idempotency_key, signingSecret);
+          
           await prisma.webhookJob.create({
             data: {
               tenantId: approval.tenantId,
               jobId,
               targetUrlHash,
-              payloadJson: JSON.stringify(action.body || {}),
-              signature: 'HMAC_SIGNATURE_HERE', // TODO: 実装
+              payloadJson: JSON.stringify(webhookPayload),
+              signature: signatureResult.signature,
+              timestamp: BigInt(signatureResult.timestamp),
               status: 'queued',
               attempts: 0,
               nextAttemptAt: new Date(),
@@ -305,8 +329,18 @@ export async function POST(request: NextRequest) {
         approveId: approve_id,
         planId: plan_id,
         action: 'confirm',
-        actor: 'user',
         status: 'executed',
+        
+        // KYA (Know Your Agent)
+        executorApiKeyId: apiKeyId,
+        executorAgentIdHash: agentIdHash,
+        executorAgentLabel: agentLabel,
+        principalUserId: approval.approvedByUserId || approval.userId,
+        principalEmailHash: approval.approvedByEmailHash,
+        
+        policyRef: null,
+        riskTier: 'low',
+        
         beforeJson: null,
         afterJson: JSON.stringify(currentEventData),
         reversible: true,
@@ -339,7 +373,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Receipt生成
+    // Receipt生成（KYA表示）
     const receiptId = `rcp_${uuidv4()}`;
     await prisma.receipt.create({
       data: {
@@ -348,6 +382,12 @@ export async function POST(request: NextRequest) {
         planId: plan_id,
         status: results.some(r => r.status === 'error') ? 'partial' : 'success',
         summaryText: `Executed ${results.length} actions`,
+        
+        // KYA（receiptに表示）
+        executorApiKeyId: apiKeyId,
+        executorAgentLabel: agentLabel,
+        principalUserId: approval.approvedByUserId || approval.userId,
+        policyRef: null,
       },
     });
 
@@ -355,6 +395,11 @@ export async function POST(request: NextRequest) {
       success: true,
       results,
       receipt_id: receiptId,
+      kya: {
+        executor_api_key_id: apiKeyId,
+        executor_agent_label: agentLabel,
+        principal_user_id: approval.approvedByUserId || approval.userId,
+      },
       metering: {
         confirm: meteringConfirms,
         webhook_job: meteringWebhookJobs,

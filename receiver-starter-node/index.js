@@ -24,15 +24,43 @@ const PORT = process.env.PORT || 3001;
 const idempotencyCache = new Map();
 
 /**
- * HMAC署名を検証
+ * HMAC署名を検証（timestamp replay protection付き）
+ * 
+ * @param {object} payload - リクエストボディ
+ * @param {string} signature - X-Yohaku-Signature
+ * @param {string} timestamp - X-Yohaku-Timestamp
+ * @param {string} secret - WEBHOOK_SIGNING_SECRET
+ * @param {number} maxSkewSeconds - 許容するタイムスタンプのずれ（デフォルト300秒=5分）
+ * @returns {object} { valid: boolean, reason?: string }
  */
-function verifySignature(payload, signature, secret) {
+function verifySignature(payload, signature, timestamp, secret, maxSkewSeconds = 300) {
+  // 1. Timestampのスキューチェック（replay attack対策）
+  const now = Math.floor(Date.now() / 1000);
+  const receivedTimestamp = parseInt(timestamp, 10);
+  
+  if (isNaN(receivedTimestamp)) {
+    return { valid: false, reason: 'Invalid timestamp format' };
+  }
+  
+  const skew = Math.abs(now - receivedTimestamp);
+  if (skew > maxSkewSeconds) {
+    return { valid: false, reason: `Timestamp skew too large: ${skew}s (max ${maxSkewSeconds}s)` };
+  }
+  
+  // 2. 署名検証（timestamp.payload）
+  const signaturePayload = `${receivedTimestamp}.${JSON.stringify(payload)}`;
   const expectedSignature = crypto
     .createHmac('sha256', secret)
-    .update(JSON.stringify(payload))
+    .update(signaturePayload)
     .digest('hex');
   
-  return `sha256=${expectedSignature}` === signature;
+  const receivedSignatureHex = signature.replace(/^sha256=/, '');
+  
+  if (expectedSignature !== receivedSignatureHex) {
+    return { valid: false, reason: 'Signature verification failed' };
+  }
+  
+  return { valid: true };
 }
 
 /**
@@ -59,21 +87,28 @@ app.post('/webhook', (req, res) => {
   console.log('[WEBHOOK] Received:', req.headers);
   
   const signature = req.headers['x-yohaku-signature'];
+  const timestamp = req.headers['x-yohaku-timestamp'];
   const idempotencyKey = req.headers['x-idempotency-key'];
   const jobId = req.headers['x-yohaku-job-id'];
   
-  // 1. 署名検証
+  // 1. 署名検証（timestamp replay protection）
   if (!signature) {
     console.error('[WEBHOOK] Missing signature');
     return res.status(401).json({ error: 'Missing signature' });
   }
   
-  if (!verifySignature(req.body, signature, WEBHOOK_SIGNING_SECRET)) {
-    console.error('[WEBHOOK] Invalid signature');
-    return res.status(401).json({ error: 'Invalid signature' });
+  if (!timestamp) {
+    console.error('[WEBHOOK] Missing timestamp');
+    return res.status(401).json({ error: 'Missing timestamp' });
   }
   
-  console.log('[WEBHOOK] ✅ Signature verified');
+  const signatureResult = verifySignature(req.body, signature, timestamp, WEBHOOK_SIGNING_SECRET);
+  if (!signatureResult.valid) {
+    console.error('[WEBHOOK] Signature verification failed:', signatureResult.reason);
+    return res.status(401).json({ error: 'Invalid signature', reason: signatureResult.reason });
+  }
+  
+  console.log('[WEBHOOK] ✅ Signature verified (timestamp OK)');
   
   // 2. Idempotency チェック
   if (!idempotencyKey) {
@@ -136,6 +171,13 @@ app.listen(PORT, () => {
   console.log(`📝 Webhook endpoint: http://localhost:${PORT}/webhook`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
 });
+
+
+
+
+
+
+
 
 
 

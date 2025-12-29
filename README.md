@@ -3,28 +3,37 @@
 
 ## 一言要約（phase1 / Exit-first / Private β）
 - AIエージェントが増える世界で一番危ないのは「勝手に実行される」こと。
-- Yohakuは、どの入口（LLM/音声/UI）から来ても、**Plan→Approve→Confirm** を安全に回す **Exitレイヤー**。
+- Yohakuは、どの入口（LLM/音声/UI）から来ても、**Plan→Approve→Confirm** を安全に回す **中立Exitレイヤー**。
 - phase1は **Webhook + Calendar Hold（ICS）** の2本だけに固定して、速度と信頼を最大化する。
 - 導入摩擦は **Receiver Starter Kit** で潰す（30分でWebhook受け口）。
+- すべての実行は **KYA（どのagentが誰の代理で何をしたか）** を追跡可能にする。
+
+## Valuation Ladder（Gate1→Gate2→Gate3）
+- Gate1（100億）：事業として成立し、買収が来ても断れる土台
+- Gate2（1500億）：標準化が現実になり、勝者multipleが付く
+- Gate3（Notion級）：中立インフラとして産業に埋め込まれ続ける
+- Yohakuの勝ち筋は一貫：**/confirmの流量 × 規格（Conformance+Treaty+KYA） × 中立（Provider Neutral）**
 
 ## Phase1のコア体験（Builders / Teams）
 1) Agentが /plan を叩く（複数案 or 1案）
 2) 人間 or ルールが /approve（TTL10分）
 3) /confirm が実行（idempotency必須）
-4) ledger（監査台帳）に残る
+4) ledger（監査台帳）に残る（KYA込み）
 5) "Value Receipt（実行レシート）"で社内共有（Team Viral）
 
 ## "出口を握る"の核（ここが本体）
-- 実行の責任（同意/監査/可逆性/冪等）を **ConfirmOS** として標準化
+- 実行の責任（同意/監査/可逆性/冪等/停止/KYA）を **ConfirmOS** として標準化
 - **Conformance（準拠テスト）+ Treaty（公開契約）** で互換の中心と信頼の価格を作る
 - コネクタは後から増やせる。出口の仕様を先に固定するのが勝ち筋。
 
 ## phase1 Focus Rules（非交渉）
 - ✅ Exit-first：ConfirmOS + Action Cloud（Private β）
 - ✅ コネクタ2本固定：Webhook + Calendar Hold（増やさない）
-- ✅ Conformance + Treaty v0 を"実装物"として完成
+- ✅ Conformance + Treaty v0.3 を"実装物"として完成
 - ✅ Receiver Starter Kit（導入摩擦を潰す）を同時に出す
 - ✅ Kill/Freeze（事故停止）を仕組みで持つ
+- ✅ KYA（executor/principal/delegation）をledger/receiptに刻む
+- ✅ Provider Neutral / Planner resilience（mock/rules）で検証を止めない
 - ❌ Phone（実行）/ Proactive（実行）/ 外部Memory import / OS deep / Marketplace / Public API一般公開（SEALED）
 
 ## KPI（phase1：週次で見る）
@@ -33,6 +42,11 @@
 - misexec_pct（誤実行）
 - ledger_integrity
 - webhook_delivery_success（2h以内成功）
+- approve_to_confirm_conversion
+- team_viral_rate（approveリンク経由の社内拡散）
+- receiver_time_to_first_success（導入時間）
+- kya_executor_coverage（executorが欠損してない割合=100%）
+- unique_agents_per_tenant（API key/agent idの数）
 - approve_to_confirm_conversion
 - team_viral_rate（approveリンク経由の社内拡散）
 - receiver_time_to_first_success（導入時間）

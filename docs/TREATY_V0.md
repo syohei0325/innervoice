@@ -80,3 +80,10 @@ WHERE created_at >= NOW() - INTERVAL '7 days';
 
 
 
+
+
+
+
+
+
+

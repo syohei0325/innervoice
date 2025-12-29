@@ -115,17 +115,24 @@ model Plan {
   @@map("plans")
 }
 
-// Approvals - 承認（TTL10分）
+// Approvals - 承認（TTL10分 + KYA principal）
 model Approval {
-  id         String    @id @default(cuid())
-  tenantId   String    @map("tenant_id")
-  userId     String    @map("user_id")
-  approveId  String    @unique @map("approve_id") // aprv_xxx
-  planId     String?   @map("plan_id")
-  scopeJson  String    @map("scope_json") // { "actions": [...], "risk_level": "low|medium|high" }
-  expiresAt  DateTime  @map("expires_at") // 10分後
-  createdAt  DateTime  @default(now()) @map("created_at")
-  usedAt     DateTime? @map("used_at")
+  id                  String    @id @default(cuid())
+  tenantId            String    @map("tenant_id")
+  userId              String    @map("user_id")
+  approveId           String    @unique @map("approve_id") // aprv_xxx
+  planId              String?   @map("plan_id")
+  
+  // KYA Principal（承認者情報）
+  approvedByUserId    String?   @map("approved_by_user_id")
+  approvedByEmailHash String?   @map("approved_by_email_hash")
+  approvedVia         String?   @map("approved_via")         // ui|api
+  approvedAt          DateTime? @map("approved_at")
+  
+  scopeJson           String    @map("scope_json") // { "actions": [...], "risk_level": "low|medium|high" }
+  expiresAt           DateTime  @map("expires_at") // 10分後
+  createdAt           DateTime  @default(now()) @map("created_at")
+  usedAt              DateTime? @map("used_at")
 
   tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -157,21 +164,31 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// Execution Ledger - 台帳（append-only chain）
+// Execution Ledger - 台帳（append-only chain + KYA）
 model LedgerEvent {
-  id           String    @id @default(cuid())
-  tenantId     String    @map("tenant_id")
-  approveId    String?   @map("approve_id")
-  planId       String?   @map("plan_id")
-  action       String    // webhook.dispatch|calendar.hold.create
-  actor        String    // user|automation
-  status       String    // approved|executed|failed|rolled_back
-  beforeJson   String?   @map("before_json")
-  afterJson    String?   @map("after_json")
-  reversible   Boolean   @default(true)
-  rollbackId   String?   @map("rollback_id")
-  ts           DateTime  @default(now())
-  prevHash     String?   @map("prev_hash") // 改ざん検知用ハッシュチェーン
+  id                    String    @id @default(cuid())
+  tenantId              String    @map("tenant_id")
+  approveId             String?   @map("approve_id")
+  planId                String?   @map("plan_id")
+  action                String    // webhook.dispatch|calendar.hold.create
+  status                String    // approved|executed|failed|rolled_back
+  
+  // KYA (Know Your Agent) - phase1必須
+  executorApiKeyId      String?   @map("executor_api_key_id")      // 実行主体（API Key）
+  executorAgentIdHash   String?   @map("executor_agent_id_hash")   // Agent ID（hash化）
+  executorAgentLabel    String?   @map("executor_agent_label")     // Agent表示名
+  principalUserId       String?   @map("principal_user_id")        // 承認者（human）
+  principalEmailHash    String?   @map("principal_email_hash")     // 承認者email（hash化）
+  
+  policyRef             String?   @map("policy_ref")               // ポリシー参照
+  riskTier              String?   @map("risk_tier")                // low|medium|high
+  
+  beforeJson            String?   @map("before_json")
+  afterJson             String?   @map("after_json")
+  reversible            Boolean   @default(true)
+  rollbackId            String?   @map("rollback_id")
+  ts                    DateTime  @default(now())
+  prevHash              String?   @map("prev_hash")                // 改ざん検知用ハッシュチェーン
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   approval Approval? @relation(fields: [approveId], references: [id], onDelete: SetNull)
@@ -180,6 +197,7 @@ model LedgerEvent {
   @@index([tenantId, ts])
   @@index([approveId, ts])
   @@index([planId, ts])
+  @@index([executorApiKeyId, ts])
   @@map("ledger_events")
 }
 
@@ -217,7 +235,7 @@ model ConnectorConfig {
   @@map("connector_configs")
 }
 
-// Webhook Jobs - Webhook配信ジョブ
+// Webhook Jobs - Webhook配信ジョブ（timestamp replay protection）
 model WebhookJob {
   id            String    @id @default(cuid())
   tenantId      String    @map("tenant_id")
@@ -225,6 +243,7 @@ model WebhookJob {
   targetUrlHash String    @map("target_url_hash")
   payloadJson   String    @map("payload_json")
   signature     String
+  timestamp     BigInt    @default(0)                        // Unix epoch seconds（replay protection）
   status        String    @default("queued") // queued|delivering|succeeded|failed
   attempts      Int       @default(0)
   nextAttemptAt DateTime? @map("next_attempt_at")
@@ -239,20 +258,28 @@ model WebhookJob {
   @@map("webhook_jobs")
 }
 
-// Receipts - 実行レシート
+// Receipts - 実行レシート（KYA表示）
 model Receipt {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
-  planId      String   @map("plan_id")
-  status      String   // success|partial|failed
-  summaryText String   @map("summary_text")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                  String   @id @default(cuid())
+  tenantId            String   @map("tenant_id")
+  planId              String   @map("plan_id")
+  status              String   // success|partial|failed
+  summaryText         String   @map("summary_text")
+  
+  // KYA（receiptに表示）
+  executorApiKeyId    String?  @map("executor_api_key_id")
+  executorAgentLabel  String?  @map("executor_agent_label")
+  principalUserId     String?  @map("principal_user_id")
+  policyRef           String?  @map("policy_ref")
+  
+  createdAt           DateTime @default(now()) @map("created_at")
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plan         Plan          @relation(fields: [planId], references: [id], onDelete: Cascade)
   receiptLinks ReceiptLink[]
 
   @@index([tenantId, createdAt])
+  @@index([executorApiKeyId])
   @@map("receipts")
 }
 
