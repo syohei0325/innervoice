@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Approval作成（TTL 10分）
+    const approvalId = `appr_${uuidv4()}`;
     const approveId = `aprv_${uuidv4()}`;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10分後
 
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
 
     await prisma.approval.create({
       data: {
+        id: approvalId,
         tenantId,
         userId,
         approveId,
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
       data: {
         tenantId,
         userId,
-        approveId,
+        approveId: approvalId, // approvals.id を参照
         action: 'approve',
         payloadJson: JSON.stringify({
           plan_id,

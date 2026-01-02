@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
 
         if (action.action === 'webhook.dispatch') {
           // Webhook実行（phase1の主戦場）
-          const targetUrl = action.target_url || action.connector_id;
+          const targetUrl = action.target_url || action.payload?.url || action.connector_id;
           
           if (!targetUrl) {
             results.push({
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
               executor_api_key_id: apiKeyId,
               executor_agent_label: agentLabel,
             },
-            payload: action.body || {},
+            payload: action.body || action.payload?.body || {},
           };
           
           const signingSecret = getWebhookSigningSecret();
@@ -249,7 +249,8 @@ export async function POST(request: NextRequest) {
         } else if (action.action === 'calendar.hold.create') {
           // Calendar Hold実行（ICS fallback-first）
           const eventId = uuidv4();
-          const icsContent = generateIcsContent(eventId, action);
+          const actionPayload = action.payload || action;
+          const icsContent = generateIcsContent(eventId, actionPayload);
 
           results.push({
             action: 'calendar.hold.create',
@@ -295,7 +296,7 @@ export async function POST(request: NextRequest) {
       data: {
         tenantId: approval.tenantId,
         userId: approval.userId,
-        approveId: approve_id,
+        approveId: approval.id, // approvals.id を参照
         action: 'confirm',
         payloadJson: JSON.stringify({
           plan_id,
@@ -326,7 +327,7 @@ export async function POST(request: NextRequest) {
     await prisma.ledgerEvent.create({
       data: {
         tenantId: approval.tenantId,
-        approveId: approve_id,
+        approveId: approval.id, // approvals.id を参照
         planId: plan_id,
         action: 'confirm',
         status: 'executed',
