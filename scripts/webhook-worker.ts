@@ -163,6 +163,13 @@ async function main() {
   console.log(`[WEBHOOK_WORKER] Poll interval: ${POLL_INTERVAL_MS}ms`);
   console.log(`[WEBHOOK_WORKER] Max attempts: ${MAX_ATTEMPTS}`);
   console.log(`[WEBHOOK_WORKER] Batch size: ${BATCH_SIZE}`);
+  
+  // 環境確認ログ（デバッグ用）
+  const dbUrl = process.env.DATABASE_URL || 'NO_DATABASE_URL';
+  const dbHost = dbUrl.includes('@') ? dbUrl.split('@')[1].split('/')[0] : 'unknown';
+  const secretPrefix = process.env.WEBHOOK_SIGNING_SECRET?.substring(0, 6) || 'NO_SECRET';
+  console.log(`[WEBHOOK_WORKER] DB host: ${dbHost}`);
+  console.log(`[WEBHOOK_WORKER] Webhook secret prefix: ${secretPrefix}...`);
 
   // ポーリングループ
   while (true) {
