@@ -4,7 +4,7 @@ set -euo pipefail
 # Action Cloud API テストスクリプト
 # Usage: ./scripts/test-action-cloud.sh
 
-BASE_URL="http://localhost:3001"
+BASE_URL="http://localhost:3000"
 TENANT_ID="tenant_demo_001"
 USER_ID="user_demo_001"
 
