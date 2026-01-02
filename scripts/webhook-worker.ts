@@ -12,13 +12,16 @@
  * npm run webhook-worker
  */
 
+// .env を確実にロード（ts-nodeは自動ロードしないため）
+import 'dotenv/config';
+
 import { PrismaClient } from '@prisma/client';
 import fetch from 'node-fetch';
 
 const prisma = new PrismaClient();
 
 const POLL_INTERVAL_MS = parseInt(process.env.WEBHOOK_POLL_INTERVAL_MS || '5000', 10);
-const MAX_ATTEMPTS = parseInt(process.env.WEBHOOK_MAX_ATTEMPTS || '3', 10);
+const MAX_ATTEMPTS = parseInt(process.env.WEBHOOK_MAX_ATTEMPTS || '8', 10); // CURSOR_SEED.md仕様に合わせる
 const BATCH_SIZE = parseInt(process.env.WEBHOOK_BATCH_SIZE || '10', 10);
 
 async function processWebhookJobs() {
